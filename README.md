@@ -2,7 +2,7 @@
 
 Open Jewel CAD is an early-stage, Windows-first jewellery CAD project. The long-term goal is a professional design and manufacturing application built around accurate geometry, editable parameters, and dependable workflows.
 
-> **Project stage:** foundational Rust geometry and document model. This is not yet a desktop CAD application; OCCT kernel integration is in progress.
+> **Project stage:** Rust geometry/document foundations and first OCCT kernel operation. This is not yet a desktop CAD application.
 
 ## Goals
 
@@ -22,17 +22,19 @@ On `main` today:
 - Validated axis-aligned bounds with dimensions, volume, union, and tolerance-aware containment checks.
 - Typed errors for invalid numeric values, zero-length directions, invalid bounds, and invalid tolerances.
 - A document crate with stable feature IDs, dependency ordering, missing-reference and cycle checks, and revision tracking.
+- A C++ OCCT kernel exposed through an opaque-handle C ABI: create a box, query volume, and check B-rep validity.
 - Unit tests for geometry and feature-graph behavior.
+- A CMake/vcpkg smoke test that builds a 2×3×4 mm OCCT box and verifies its 24 mm³ volume.
 
-The Rust workspace check and all eleven unit tests passed on the current Windows development machine.
+The Rust workspace check and all eleven Rust unit tests pass. The OCCT Debug build and CMake smoke test also pass on the current Windows machine.
 
 ## What is next
 
-1. Complete the Windows C++/OCCT dependency setup and compile the first real headless kernel operation.
-2. Establish and test the Rust/C++ C ABI with owned shape handles and structured errors.
+1. Connect the Rust core to the tested C ABI and define safe handle lifetime and error conversion.
+2. Expand kernel primitives, transforms, and geometry regression coverage.
 3. Extend the document model with persistence, typed commands, parameters, regeneration, and undo/redo.
 4. Build the Qt desktop shell and viewport after the kernel/API boundary is validated.
-5. Add jewellery and gemstone workflows incrementally with geometry regression tests.
+5. Add jewellery and gemstone workflows incrementally with manufacturing-oriented checks.
 
 See the [development roadmap](DEVELOPMENT_ROADMAP.md) for stage gates and the [architecture](ARCHITECTURE.md) for the proposed boundaries.
 
@@ -43,7 +45,7 @@ See the [development roadmap](DEVELOPMENT_ROADMAP.md) for stage gates and the [a
 - **Qt 6:** Windows desktop interface and viewport integration.
 - **CMake and Cargo:** native and Rust builds.
 
-These are planned boundaries. Qt integration and OCCT kernel code are not yet part of the built application.
+The Qt desktop is still planned and has not been integrated. The first OCCT-backed kernel operation is implemented and tested.
 
 ## Build the Rust foundation (Windows)
 
@@ -54,7 +56,18 @@ cargo check --workspace
 cargo test --workspace
 ```
 
-The C++/OCCT build instructions will be added after the kernel dependency setup is reproducible.
+## Build the C++/OCCT kernel (Windows)
+
+Install Visual Studio with **Desktop development with C++**, CMake, Git, and vcpkg. Set `VCPKG_ROOT` to the vcpkg checkout that matches the baseline pinned in `vcpkg.json`. From a Visual Studio Developer PowerShell at the repository root:
+
+```powershell
+$env:VCPKG_ROOT = "$HOME\Documents\vcpkg"
+cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows
+cmake --build build --config Debug
+ctest --test-dir build -C Debug --output-on-failure
+```
+
+The first configure builds or restores OCCT and its dependencies and can take a long time.
 
 ## Project documents
 

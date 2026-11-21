@@ -47,3 +47,12 @@ Record accepted decisions here. Proposed items remain open until reviewed; do no
 - **Decision:** No source or product license has been selected.
 - **Reason:** Qt edition, OCCT obligations, third-party dependencies, and commercial distribution must be considered together.
 - **Next step:** Decide before publishing a license or shipping binaries.
+
+## TD-007 — Pin OCCT through the vcpkg manifest
+
+- **Status:** Accepted for the initial Windows kernel spike
+- **Decision:** Use the vcpkg manifest and its pinned registry baseline to resolve Open CASCADE Technology 8.0.1 for the x64 Windows MSVC triplet.
+- **Reason:** A manifest baseline makes the dependency selection reproducible across developer machines and CI.
+- **Trade-off:** The first build compiles a large native dependency set and can take substantial time.
+- **License:** OCCT 8.0.1 is distributed under LGPL 2.1 with the Open CASCADE exception; review and include the corresponding notices before distributing the application.
+- **Validation:** Installed and built on Windows; the OCCT box-volume/validity smoke test passes.
