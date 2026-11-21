@@ -1,4 +1,4 @@
-# MeharajCAD development roadmap
+# Open Jewel CAD development roadmap
 
 This roadmap is a sequence of reviewable gates. Dates and staffing estimates are intentionally omitted until the architecture and toolchain are validated.
 
