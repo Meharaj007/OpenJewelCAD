@@ -1,7 +1,8 @@
 mod gui;
 
-use openjewelcad_cad_ffi::Kernel;
+use openjewelcad_cad_ffi::{Kernel, Shape};
 use openjewelcad_geometry::LengthMm;
+use std::collections::BTreeMap;
 use std::env;
 use std::error::Error;
 use std::fs;
@@ -14,76 +15,165 @@ unsafe extern "system" {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct BoxModel {
-    width_mm: LengthMm,
-    depth_mm: LengthMm,
-    height_mm: LengthMm,
+enum PrimitiveKind {
+    Box,
+    Cylinder,
+    Sphere,
+    Torus,
 }
 
-impl BoxModel {
-    fn new(width: f64, depth: f64, height: f64) -> Result<Self, Box<dyn Error>> {
-        for (label, value) in [("width", width), ("depth", depth), ("height", height)] {
-            if !value.is_finite() || value <= 0.0 {
+impl PrimitiveKind {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Box => "box",
+            Self::Cylinder => "cylinder",
+            Self::Sphere => "sphere",
+            Self::Torus => "torus",
+        }
+    }
+
+    fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "box" => Some(Self::Box),
+            "cylinder" => Some(Self::Cylinder),
+            "sphere" => Some(Self::Sphere),
+            "torus" => Some(Self::Torus),
+            _ => None,
+        }
+    }
+
+    fn display_name(self) -> &'static str {
+        match self {
+            Self::Box => "Box",
+            Self::Cylinder => "Cylinder",
+            Self::Sphere => "Sphere",
+            Self::Torus => "Torus",
+        }
+    }
+
+    fn parameter_names(self) -> &'static [&'static str] {
+        match self {
+            Self::Box => &["width_mm", "depth_mm", "height_mm"],
+            Self::Cylinder => &["radius_mm", "height_mm"],
+            Self::Sphere => &["radius_mm"],
+            Self::Torus => &["major_radius_mm", "tube_radius_mm"],
+        }
+    }
+
+    fn parameter_labels(self) -> &'static [&'static str] {
+        match self {
+            Self::Box => &["Width", "Depth", "Height"],
+            Self::Cylinder => &["Radius", "Height"],
+            Self::Sphere => &["Radius"],
+            Self::Torus => &["Major radius", "Tube radius"],
+        }
+    }
+
+    fn defaults(self) -> [f64; 3] {
+        match self {
+            Self::Box => [10.0, 10.0, 2.0],
+            Self::Cylinder => [5.0, 10.0, 0.0],
+            Self::Sphere => [5.0, 0.0, 0.0],
+            Self::Torus => [8.0, 2.0, 0.0],
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct PrimitiveModel {
+    kind: PrimitiveKind,
+    parameters_mm: [LengthMm; 3],
+}
+
+impl PrimitiveModel {
+    fn new(kind: PrimitiveKind, values: [f64; 3]) -> Result<Self, Box<dyn Error>> {
+        let names = kind.parameter_names();
+        for (index, name) in names.iter().enumerate() {
+            if !values[index].is_finite() || values[index] <= 0.0 {
                 return Err(
-                    format!("{label} must be a finite positive number of millimetres").into(),
+                    format!("{name} must be a finite positive number of millimetres").into(),
                 );
             }
         }
+        if kind == PrimitiveKind::Torus && values[0] <= values[1] {
+            return Err("torus major_radius_mm must be greater than tube_radius_mm".into());
+        }
+
+        let mut parameters_mm = [LengthMm::zero(); 3];
+        for (index, _) in names.iter().enumerate() {
+            parameters_mm[index] = LengthMm::new(values[index])?;
+        }
         Ok(Self {
-            width_mm: LengthMm::new(width)?,
-            depth_mm: LengthMm::new(depth)?,
-            height_mm: LengthMm::new(height)?,
+            kind,
+            parameters_mm,
         })
     }
 
+    fn values(self) -> [f64; 3] {
+        self.parameters_mm.map(LengthMm::as_mm)
+    }
+
     fn serialize(self) -> String {
-        format!(
-            "OPENJEWELCAD_PROJECT=1\nfeature_type=box\nwidth_mm={:.17}\ndepth_mm={:.17}\nheight_mm={:.17}\n",
-            self.width_mm.as_mm(), self.depth_mm.as_mm(), self.height_mm.as_mm()
-        )
+        let mut content = format!(
+            "OPENJEWELCAD_PROJECT=1\nfeature_type={}\n",
+            self.kind.name()
+        );
+        for (index, name) in self.kind.parameter_names().iter().enumerate() {
+            content.push_str(&format!(
+                "{name}={:.17}\n",
+                self.parameters_mm[index].as_mm()
+            ));
+        }
+        content
     }
 
     fn parse(content: &str) -> Result<Self, Box<dyn Error>> {
-        let mut version = None;
-        let mut feature_type = None;
-        let mut width = None;
-        let mut depth = None;
-        let mut height = None;
+        let mut fields = BTreeMap::new();
         for line in content.lines() {
             let (key, value) = line.split_once('=').ok_or("project has a malformed line")?;
-            let target = match key {
-                "OPENJEWELCAD_PROJECT" => &mut version,
-                "feature_type" => &mut feature_type,
-                "width_mm" => &mut width,
-                "depth_mm" => &mut depth,
-                "height_mm" => &mut height,
-                _ => return Err(format!("unknown project field: {key}").into()),
-            };
-            if target.replace(value).is_some() {
+            if fields.insert(key, value).is_some() {
                 return Err(format!("duplicate project field: {key}").into());
             }
         }
-        if version != Some("1") {
+        if fields.remove("OPENJEWELCAD_PROJECT") != Some("1") {
             return Err("unsupported or missing project version".into());
         }
-        if feature_type != Some("box") {
-            return Err("unsupported or missing feature type".into());
+        let kind_name = fields
+            .remove("feature_type")
+            .ok_or("project is missing feature_type")?;
+        let kind = PrimitiveKind::from_name(kind_name)
+            .ok_or_else(|| format!("unsupported feature type: {kind_name}"))?;
+        if let Some(key) = fields
+            .keys()
+            .find(|key| !kind.parameter_names().contains(key))
+        {
+            return Err(format!("unknown project field for {}: {key}", kind.name()).into());
         }
-        let number = |value: Option<&str>, label: &str| -> Result<f64, Box<dyn Error>> {
-            value
-                .ok_or_else(|| -> Box<dyn Error> { format!("missing {label}").into() })?
+
+        let mut values = [0.0; 3];
+        for (index, name) in kind.parameter_names().iter().enumerate() {
+            let value = fields
+                .remove(name)
+                .ok_or_else(|| format!("project is missing {name}"))?;
+            values[index] = value
                 .parse::<f64>()
-                .map_err(|_| format!("invalid {label}").into())
-        };
-        Self::new(
-            number(width, "width_mm")?,
-            number(depth, "depth_mm")?,
-            number(height, "height_mm")?,
-        )
+                .map_err(|_| format!("invalid {name}"))?;
+        }
+        Self::new(kind, values)
+    }
+
+    fn create_shape(self, kernel: &Kernel) -> Result<Shape, openjewelcad_cad_ffi::KernelError> {
+        let values = self.values();
+        match self.kind {
+            PrimitiveKind::Box => kernel.box_mm(values[0], values[1], values[2]),
+            PrimitiveKind::Cylinder => kernel.cylinder_mm(values[0], values[1]),
+            PrimitiveKind::Sphere => kernel.sphere_mm(values[0]),
+            PrimitiveKind::Torus => kernel.torus_mm(values[0], values[1]),
+        }
     }
 }
 
-fn save_model(path: &Path, model: BoxModel) -> Result<(), Box<dyn Error>> {
+fn save_model(path: &Path, model: PrimitiveModel) -> Result<(), Box<dyn Error>> {
     let temporary = temporary_path(path);
     fs::write(&temporary, model.serialize())?;
     if let Err(error) = replace_file(&temporary, path) {
@@ -121,8 +211,30 @@ fn replace_file(source: &Path, destination: &Path) -> std::io::Result<()> {
     }
 }
 
-fn load_model(path: &Path) -> Result<BoxModel, Box<dyn Error>> {
-    BoxModel::parse(&fs::read_to_string(path)?)
+fn load_model(path: &Path) -> Result<PrimitiveModel, Box<dyn Error>> {
+    PrimitiveModel::parse(&fs::read_to_string(path)?)
+}
+
+fn create_or_edit(
+    kind: PrimitiveKind,
+    action: &str,
+    file: &str,
+    values: [f64; 3],
+) -> Result<(), Box<dyn Error>> {
+    let path = Path::new(file);
+    if action == "edit" {
+        let existing = load_model(path)?;
+        if existing.kind != kind {
+            return Err(format!(
+                "cannot edit a {} project with the {} command",
+                existing.kind.name(),
+                kind.name()
+            )
+            .into());
+        }
+    }
+    save_model(path, PrimitiveModel::new(kind, values)?)?;
+    inspect(path)
 }
 
 fn run() -> Result<(), Box<dyn Error>> {
@@ -134,16 +246,27 @@ fn run() -> Result<(), Box<dyn Error>> {
             print_help();
             Ok(())
         }
-        [command, action, file, width, depth, height]
-            if command == "box" && (action == "new" || action == "edit") =>
+        [command, action, file, a, b, c]
+            if command == "box" && matches!(action.as_str(), "new" | "edit") =>
         {
-            let path = Path::new(file);
-            if action == "edit" {
-                load_model(path)?;
-            }
-            let updated = BoxModel::new(width.parse()?, depth.parse()?, height.parse()?)?;
-            save_model(path, updated)?;
-            inspect(path)
+            create_or_edit(
+                PrimitiveKind::Box,
+                action,
+                file,
+                [a.parse()?, b.parse()?, c.parse()?],
+            )
+        }
+        [command, action, file, a, b]
+            if matches!(command.as_str(), "cylinder" | "torus")
+                && matches!(action.as_str(), "new" | "edit") =>
+        {
+            let kind = PrimitiveKind::from_name(command).expect("matched a known primitive");
+            create_or_edit(kind, action, file, [a.parse()?, b.parse()?, 0.0])
+        }
+        [command, action, file, a]
+            if command == "sphere" && matches!(action.as_str(), "new" | "edit") =>
+        {
+            create_or_edit(PrimitiveKind::Sphere, action, file, [a.parse()?, 0.0, 0.0])
         }
         [command, file] if command == "inspect" => inspect(Path::new(file)),
         _ => {
@@ -160,25 +283,18 @@ fn launch_gui() -> Result<(), Box<dyn Error>> {
 }
 
 fn print_help() {
-    println!("Open Jewel CAD — simple parametric box editor\n\nCommands:\n  openjewelcad                 Open the desktop editor\n  openjewelcad gui             Open the desktop editor\n  openjewelcad box new <file> <width_mm> <depth_mm> <height_mm>\n  openjewelcad box edit <file> <width_mm> <depth_mm> <height_mm>\n  openjewelcad inspect <file>\n\nThe desktop editor needs OPENJEWELCAD_KERNEL_DLL set to the built kernel DLL and its folder on PATH.");
+    println!("Open Jewel CAD — parametric primitive editor\n\nCommands:\n  openjewelcad                 Open the desktop editor\n  openjewelcad gui             Open the desktop editor\n  openjewelcad box new <file> <width_mm> <depth_mm> <height_mm>\n  openjewelcad cylinder new <file> <radius_mm> <height_mm>\n  openjewelcad sphere new <file> <radius_mm>\n  openjewelcad torus new <file> <major_radius_mm> <tube_radius_mm>\n  Use edit instead of new to update an existing project of the same type.\n  openjewelcad inspect <file>\n\nThe desktop editor needs OPENJEWELCAD_KERNEL_DLL set to the built kernel DLL and its folder on PATH.");
 }
 
 fn inspect(path: &Path) -> Result<(), Box<dyn Error>> {
     let model = load_model(path)?;
     let kernel = Kernel::from_environment()?;
-    let shape = kernel.box_mm(
-        model.width_mm.as_mm(),
-        model.depth_mm.as_mm(),
-        model.height_mm.as_mm(),
-    )?;
+    let shape = model.create_shape(&kernel)?;
     println!("Project: {}", path.display());
-    println!("Feature: Box");
-    println!(
-        "Size: {:.3} × {:.3} × {:.3} mm",
-        model.width_mm.as_mm(),
-        model.depth_mm.as_mm(),
-        model.height_mm.as_mm()
-    );
+    println!("Feature: {}", model.kind.display_name());
+    for (index, label) in model.kind.parameter_labels().iter().enumerate() {
+        println!("{label}: {:.3} mm", model.parameters_mm[index].as_mm());
+    }
     println!("Volume: {:.3} mm³", shape.volume_mm3()?);
     println!(
         "OCCT validity: {}",
@@ -204,13 +320,25 @@ mod tests {
 
     #[test]
     fn box_project_round_trips_parameters() {
-        let model = BoxModel::new(2.5, 3.0, 4.25).unwrap();
-        assert_eq!(BoxModel::parse(&model.serialize()).unwrap(), model);
+        for (kind, values) in [
+            (PrimitiveKind::Box, [2.5, 3.0, 4.25]),
+            (PrimitiveKind::Cylinder, [2.5, 4.25, 0.0]),
+            (PrimitiveKind::Sphere, [3.0, 0.0, 0.0]),
+            (PrimitiveKind::Torus, [5.0, 1.25, 0.0]),
+        ] {
+            let model = PrimitiveModel::new(kind, values).unwrap();
+            assert_eq!(PrimitiveModel::parse(&model.serialize()).unwrap(), model);
+        }
     }
 
     #[test]
     fn rejects_invalid_dimensions_and_project_version() {
-        assert!(BoxModel::new(0.0, 1.0, 1.0).is_err());
-        assert!(BoxModel::parse("OPENJEWELCAD_PROJECT=9\n").is_err());
+        assert!(PrimitiveModel::new(PrimitiveKind::Box, [0.0, 1.0, 1.0]).is_err());
+        assert!(PrimitiveModel::new(PrimitiveKind::Torus, [2.0, 2.0, 0.0]).is_err());
+        assert!(PrimitiveModel::parse("OPENJEWELCAD_PROJECT=9\n").is_err());
+        assert!(PrimitiveModel::parse(
+            "OPENJEWELCAD_PROJECT=1\nfeature_type=sphere\nradius_mm=2\nextra=1\n"
+        )
+        .is_err());
     }
 }

@@ -19,7 +19,7 @@ This roadmap is a sequence of reviewable gates. Dates and staffing estimates are
 
 **Exit:** clean checkout builds reproducibly; one geometry operation runs headlessly and through the ABI; dependency and license inventory is approved.
 
-**Progress:** The Windows MSVC/CMake/vcpkg toolchain is verified. OCCT 8.0.1 is pinned through the vcpkg baseline. A versioned C ABI can create an OCCT box, report volume, and check validity. Rust loads the DLL, owns the shape handle, and verifies the ABI version. A Rust/egui desktop prototype now provides box dimension controls, a rotatable shaded preview, project open/save, and OCCT regeneration. The preview is not yet built from OCCT tessellation; feature history, a full viewport, and the final distribution license review remain open.
+**Progress:** The Windows MSVC/CMake/vcpkg toolchain is verified. OCCT 8.0.1 is pinned through the vcpkg baseline. ABI version 2 creates boxes, cylinders, spheres, and tori, and reports volume and validity. Rust owns the handles through the safe FFI wrapper. The Rust/egui desktop editor has a primitive selector, dimension controls, project open/save, and OCCT regeneration. The lightweight preview mesh is parameter-driven rather than OCCT-tessellated; booleans, feature history, a full viewport, and the final distribution license review remain open.
 
 ## Gate 2 — Geometry foundation
 

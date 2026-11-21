@@ -35,6 +35,15 @@ OJCAD_API uint32_t ojcad_abi_version(void);
 /// Create an axis-aligned box with positive dimensions in millimetres.
 OJCAD_API OJCAD_Status ojcad_box_create(double x_mm, double y_mm, double z_mm,
                                          OJCAD_Shape** out_shape, OJCAD_Error* out_error);
+/// Create a cylinder along the Z axis with positive radius and height in millimetres.
+OJCAD_API OJCAD_Status ojcad_cylinder_create(double radius_mm, double height_mm,
+                                              OJCAD_Shape** out_shape, OJCAD_Error* out_error);
+/// Create a sphere centered at the origin with positive radius in millimetres.
+OJCAD_API OJCAD_Status ojcad_sphere_create(double radius_mm,
+                                            OJCAD_Shape** out_shape, OJCAD_Error* out_error);
+/// Create a ring-shaped torus with major radius greater than tube radius, in millimetres.
+OJCAD_API OJCAD_Status ojcad_torus_create(double major_radius_mm, double tube_radius_mm,
+                                           OJCAD_Shape** out_shape, OJCAD_Error* out_error);
 OJCAD_API OJCAD_Status ojcad_shape_volume_mm3(const OJCAD_Shape* shape,
                                                double* out_volume, OJCAD_Error* out_error);
 OJCAD_API OJCAD_Status ojcad_shape_is_valid(const OJCAD_Shape* shape,

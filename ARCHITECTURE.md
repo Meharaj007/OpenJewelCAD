@@ -27,7 +27,7 @@ The interface direction is intentionally narrow. The desktop sends typed paramet
 - **C++ CAD library:** OCCT shape construction and operations, validation, unit-aware geometry helpers, meshing requests, import/export adapters, and jewellery-specific geometry algorithms.
 - **Persistence:** versioned project archive/manifest and a transactional metadata/library database. Geometry serialization format remains a decision to verify; do not assume that serializing native OCCT objects is a stable interchange format.
 
-The current editor uses Rust/egui for a compact native window and the existing safe Rust wrapper for kernel operations. Its shaded box preview is projected from the feature dimensions; it is not yet an OCCT-meshed viewport. Keep presentation code separate from kernel algorithms, and revisit renderer and UI choices when the full feature-history workflow is designed.
+The current editor uses Rust/egui for a compact native window and the safe Rust wrapper for kernel operations. Its shaded previews are generated from primitive parameters; they are not yet OCCT-meshed viewport geometry. Keep presentation code separate from kernel algorithms, and revisit renderer and UI choices when the full feature-history workflow is designed.
 
 ## 3. Suggested repository layout
 

@@ -12,6 +12,8 @@ use std::ptr::NonNull;
 use std::sync::Arc;
 
 type BoxCreate = unsafe extern "C" fn(f64, f64, f64, *mut *mut c_void, *mut CError) -> i32;
+type CreateOne = unsafe extern "C" fn(f64, *mut *mut c_void, *mut CError) -> i32;
+type CreateTwo = unsafe extern "C" fn(f64, f64, *mut *mut c_void, *mut CError) -> i32;
 type AbiVersion = unsafe extern "C" fn() -> u32;
 type Volume = unsafe extern "C" fn(*const c_void, *mut f64, *mut CError) -> i32;
 type IsValid = unsafe extern "C" fn(*const c_void, *mut i32, *mut CError) -> i32;
@@ -115,6 +117,9 @@ impl CError {
 struct Api {
     _library: Arc<KernelLibrary>,
     box_create: BoxCreate,
+    cylinder_create: CreateTwo,
+    sphere_create: CreateOne,
+    torus_create: CreateTwo,
     volume: Volume,
     is_valid: IsValid,
     destroy: Destroy,
@@ -133,14 +138,17 @@ impl Kernel {
         let api = unsafe {
             let abi_version: AbiVersion = library.symbol(b"ojcad_abi_version\0")?;
             let actual = abi_version();
-            if actual != 1 {
+            if actual != 2 {
                 return Err(KernelError::IncompatibleAbi {
-                    expected: 1,
+                    expected: 2,
                     actual,
                 });
             }
             Api {
                 box_create: library.symbol(b"ojcad_box_create\0")?,
+                cylinder_create: library.symbol(b"ojcad_cylinder_create\0")?,
+                sphere_create: library.symbol(b"ojcad_sphere_create\0")?,
+                torus_create: library.symbol(b"ojcad_torus_create\0")?,
                 volume: library.symbol(b"ojcad_shape_volume_mm3\0")?,
                 is_valid: library.symbol(b"ojcad_shape_is_valid\0")?,
                 destroy: library.symbol(b"ojcad_shape_destroy\0")?,
@@ -161,6 +169,40 @@ impl Kernel {
         let mut raw = std::ptr::null_mut();
         let mut error = CError::default();
         let status = unsafe { (self.api.box_create)(x, y, z, &mut raw, &mut error) };
+        self.finish_shape_creation(status, raw, error)
+    }
+
+    /// Create a cylinder along the Z axis with positive radius and height in millimetres.
+    pub fn cylinder_mm(&self, radius: f64, height: f64) -> Result<Shape, KernelError> {
+        let mut raw = std::ptr::null_mut();
+        let mut error = CError::default();
+        let status = unsafe { (self.api.cylinder_create)(radius, height, &mut raw, &mut error) };
+        self.finish_shape_creation(status, raw, error)
+    }
+
+    /// Create a sphere centered at the origin with a positive radius in millimetres.
+    pub fn sphere_mm(&self, radius: f64) -> Result<Shape, KernelError> {
+        let mut raw = std::ptr::null_mut();
+        let mut error = CError::default();
+        let status = unsafe { (self.api.sphere_create)(radius, &mut raw, &mut error) };
+        self.finish_shape_creation(status, raw, error)
+    }
+
+    /// Create a ring-shaped torus, with major radius greater than tube radius.
+    pub fn torus_mm(&self, major_radius: f64, tube_radius: f64) -> Result<Shape, KernelError> {
+        let mut raw = std::ptr::null_mut();
+        let mut error = CError::default();
+        let status =
+            unsafe { (self.api.torus_create)(major_radius, tube_radius, &mut raw, &mut error) };
+        self.finish_shape_creation(status, raw, error)
+    }
+
+    fn finish_shape_creation(
+        &self,
+        status: i32,
+        raw: *mut c_void,
+        error: CError,
+    ) -> Result<Shape, KernelError> {
         if status != 0 {
             return Err(error.into_error(status));
         }
@@ -265,6 +307,42 @@ mod tests {
     fn invalid_box_is_a_structured_error() {
         assert!(matches!(
             kernel().box_mm(0.0, 3.0, 4.0),
+            Err(KernelError::Operation { status: 1, .. })
+        ));
+    }
+
+    #[test]
+    fn primitives_have_expected_volumes_and_validity() {
+        let kernel = kernel();
+
+        let cylinder = kernel.cylinder_mm(2.0, 5.0).unwrap();
+        assert!(cylinder.is_valid().unwrap());
+        assert!((cylinder.volume_mm3().unwrap() - std::f64::consts::PI * 20.0).abs() < 1e-8);
+
+        let sphere = kernel.sphere_mm(3.0).unwrap();
+        assert!(sphere.is_valid().unwrap());
+        let sphere_volume = 4.0 / 3.0 * std::f64::consts::PI * 27.0;
+        assert!((sphere.volume_mm3().unwrap() - sphere_volume).abs() < 1e-8);
+
+        let torus = kernel.torus_mm(5.0, 1.0).unwrap();
+        assert!(torus.is_valid().unwrap());
+        let torus_volume = 2.0 * std::f64::consts::PI.powi(2) * 5.0;
+        assert!((torus.volume_mm3().unwrap() - torus_volume).abs() < 1e-7);
+    }
+
+    #[test]
+    fn invalid_primitives_are_structured_errors() {
+        let kernel = kernel();
+        assert!(matches!(
+            kernel.cylinder_mm(2.0, 0.0),
+            Err(KernelError::Operation { status: 1, .. })
+        ));
+        assert!(matches!(
+            kernel.sphere_mm(f64::NAN),
+            Err(KernelError::Operation { status: 1, .. })
+        ));
+        assert!(matches!(
+            kernel.torus_mm(1.0, 1.0),
             Err(KernelError::Operation { status: 1, .. })
         ));
     }
