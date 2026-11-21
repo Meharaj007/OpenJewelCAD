@@ -11,24 +11,57 @@ pub struct LengthMm(f64);
 
 impl LengthMm {
     pub fn new(value: f64) -> Result<Self, GeometryError> {
-        if value.is_finite() { Ok(Self(value)) } else { Err(GeometryError::NonFiniteValue) }
+        if value.is_finite() {
+            Ok(Self(value))
+        } else {
+            Err(GeometryError::NonFiniteValue)
+        }
     }
 
-    pub const fn zero() -> Self { Self(0.0) }
-    pub const fn as_mm(self) -> f64 { self.0 }
+    pub const fn zero() -> Self {
+        Self(0.0)
+    }
+    pub const fn as_mm(self) -> f64 {
+        self.0
+    }
 }
 
 /// A finite position in the right-handed, millimetre-based world coordinate system.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Point3Mm { x: LengthMm, y: LengthMm, z: LengthMm }
+pub struct Point3Mm {
+    x: LengthMm,
+    y: LengthMm,
+    z: LengthMm,
+}
 
 impl Point3Mm {
     pub fn new(x_mm: f64, y_mm: f64, z_mm: f64) -> Result<Self, GeometryError> {
-        Ok(Self { x: LengthMm::new(x_mm)?, y: LengthMm::new(y_mm)?, z: LengthMm::new(z_mm)? })
+        Ok(Self {
+            x: LengthMm::new(x_mm)?,
+            y: LengthMm::new(y_mm)?,
+            z: LengthMm::new(z_mm)?,
+        })
     }
 
     pub fn translated(self, offset: Vector3) -> Result<Self, GeometryError> {
-        Self::new(self.x.as_mm() + offset.x, self.y.as_mm() + offset.y, self.z.as_mm() + offset.z)
+        Self::new(
+            self.x.as_mm() + offset.x,
+            self.y.as_mm() + offset.y,
+            self.z.as_mm() + offset.z,
+        )
+    }
+
+    /// Returns the displacement from `self` to `other`.
+    pub fn vector_to(self, other: Self) -> Result<Vector3, GeometryError> {
+        Vector3::new(
+            other.x.as_mm() - self.x.as_mm(),
+            other.y.as_mm() - self.y.as_mm(),
+            other.z.as_mm() - self.z.as_mm(),
+        )
+    }
+
+    pub fn distance_to(self, other: Self) -> Result<LengthMm, GeometryError> {
+        LengthMm::new(self.vector_to(other)?.magnitude()?)
     }
 
     pub const fn coordinates_mm(self) -> (f64, f64, f64) {
@@ -38,7 +71,11 @@ impl Point3Mm {
 
 /// A finite direction or displacement vector.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Vector3 { x: f64, y: f64, z: f64 }
+pub struct Vector3 {
+    x: f64,
+    y: f64,
+    z: f64,
+}
 
 impl Vector3 {
     pub fn new(x: f64, y: f64, z: f64) -> Result<Self, GeometryError> {
@@ -49,42 +86,78 @@ impl Vector3 {
         }
     }
 
-    pub fn dot(self, rhs: Self) -> f64 { self.x * rhs.x + self.y * rhs.y + self.z * rhs.z }
-
-    pub fn cross(self, rhs: Self) -> Self {
-        Self {
-            x: self.y * rhs.z - self.z * rhs.y,
-            y: self.z * rhs.x - self.x * rhs.z,
-            z: self.x * rhs.y - self.y * rhs.x,
+    pub fn dot(self, rhs: Self) -> Result<f64, GeometryError> {
+        let value = self.x * rhs.x + self.y * rhs.y + self.z * rhs.z;
+        if value.is_finite() {
+            Ok(value)
+        } else {
+            Err(GeometryError::NonFiniteValue)
         }
     }
 
-    pub fn magnitude(self) -> f64 { self.x.hypot(self.y).hypot(self.z) }
-    pub const fn components(self) -> (f64, f64, f64) { (self.x, self.y, self.z) }
+    pub fn cross(self, rhs: Self) -> Result<Self, GeometryError> {
+        Self::new(
+            self.y * rhs.z - self.z * rhs.y,
+            self.z * rhs.x - self.x * rhs.z,
+            self.x * rhs.y - self.y * rhs.x,
+        )
+    }
+
+    pub fn magnitude(self) -> Result<f64, GeometryError> {
+        let value = self.x.hypot(self.y).hypot(self.z);
+        if value.is_finite() {
+            Ok(value)
+        } else {
+            Err(GeometryError::NonFiniteValue)
+        }
+    }
+
+    pub fn scaled(self, factor: f64) -> Result<Self, GeometryError> {
+        if !factor.is_finite() {
+            return Err(GeometryError::NonFiniteValue);
+        }
+        Self::new(self.x * factor, self.y * factor, self.z * factor)
+    }
+    pub const fn components(self) -> (f64, f64, f64) {
+        (self.x, self.y, self.z)
+    }
 
     pub fn normalized(self) -> Result<Self, GeometryError> {
-        let magnitude = self.magnitude();
-        if !magnitude.is_finite() { return Err(GeometryError::NonFiniteValue); }
-        if magnitude == 0.0 { return Err(GeometryError::ZeroLengthDirection); }
+        let magnitude = self.magnitude()?;
+        if magnitude == 0.0 {
+            return Err(GeometryError::ZeroLengthDirection);
+        }
         Self::new(self.x / magnitude, self.y / magnitude, self.z / magnitude)
     }
 }
 
 /// Explicit linear and angular tolerances for geometry operations.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct GeometryTolerance { linear: LengthMm, angular_radians: f64 }
+pub struct GeometryTolerance {
+    linear: LengthMm,
+    angular_radians: f64,
+}
 
 impl GeometryTolerance {
     pub fn new(linear_mm: f64, angular_radians: f64) -> Result<Self, GeometryError> {
-        if !angular_radians.is_finite() { return Err(GeometryError::NonFiniteValue); }
+        if !angular_radians.is_finite() {
+            return Err(GeometryError::NonFiniteValue);
+        }
         if linear_mm <= 0.0 || angular_radians <= 0.0 {
             return Err(GeometryError::ToleranceMustBePositive);
         }
-        Ok(Self { linear: LengthMm::new(linear_mm)?, angular_radians })
+        Ok(Self {
+            linear: LengthMm::new(linear_mm)?,
+            angular_radians,
+        })
     }
 
-    pub const fn linear_mm(self) -> f64 { self.linear.as_mm() }
-    pub const fn angular_radians(self) -> f64 { self.angular_radians }
+    pub const fn linear_mm(self) -> f64 {
+        self.linear.as_mm()
+    }
+    pub const fn angular_radians(self) -> f64 {
+        self.angular_radians
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -105,3 +178,73 @@ impl fmt::Display for GeometryError {
 }
 
 impl std::error::Error for GeometryError {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn point_distance_and_displacement_use_millimetres() {
+        let a = Point3Mm::new(1.0, 2.0, 3.0).unwrap();
+        let b = Point3Mm::new(4.0, 6.0, 3.0).unwrap();
+
+        assert_eq!(a.vector_to(b).unwrap().components(), (3.0, 4.0, 0.0));
+        assert_eq!(a.distance_to(b).unwrap().as_mm(), 5.0);
+    }
+
+    #[test]
+    fn vector_dot_cross_and_normalization_are_consistent() {
+        let x = Vector3::new(1.0, 0.0, 0.0).unwrap();
+        let y = Vector3::new(0.0, 1.0, 0.0).unwrap();
+
+        assert_eq!(x.dot(y).unwrap(), 0.0);
+        assert_eq!(x.cross(y).unwrap().components(), (0.0, 0.0, 1.0));
+        assert_eq!(
+            Vector3::new(0.0, 3.0, 4.0)
+                .unwrap()
+                .normalized()
+                .unwrap()
+                .components(),
+            (0.0, 0.6, 0.8)
+        );
+    }
+
+    #[test]
+    fn rejects_non_finite_geometry_values() {
+        assert_eq!(
+            Point3Mm::new(f64::NAN, 0.0, 0.0),
+            Err(GeometryError::NonFiniteValue)
+        );
+        assert_eq!(
+            Vector3::new(0.0, f64::INFINITY, 0.0),
+            Err(GeometryError::NonFiniteValue)
+        );
+        assert_eq!(
+            Vector3::new(f64::MAX, f64::MAX, 0.0).unwrap().magnitude(),
+            Err(GeometryError::NonFiniteValue)
+        );
+    }
+
+    #[test]
+    fn zero_vector_cannot_be_normalized() {
+        assert_eq!(
+            Vector3::new(0.0, 0.0, 0.0).unwrap().normalized(),
+            Err(GeometryError::ZeroLengthDirection)
+        );
+    }
+
+    #[test]
+    fn tolerance_requires_positive_finite_values() {
+        assert_eq!(
+            GeometryTolerance::new(0.0, 1e-6),
+            Err(GeometryError::ToleranceMustBePositive)
+        );
+        assert_eq!(
+            GeometryTolerance::new(0.01, f64::INFINITY),
+            Err(GeometryError::NonFiniteValue)
+        );
+        let tolerance = GeometryTolerance::new(0.01, 1e-6).unwrap();
+        assert_eq!(tolerance.linear_mm(), 0.01);
+        assert_eq!(tolerance.angular_radians(), 1e-6);
+    }
+}
