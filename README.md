@@ -1,20 +1,67 @@
 # Open Jewel CAD
 
-Open Jewel CAD is a planned Windows desktop application for professional jewellery design and manufacturing. The proposed foundation combines Rust application services, C++ CAD geometry, Open CASCADE Technology (OCCT), and Qt 6.
+Open Jewel CAD is an early-stage, Windows-first jewellery CAD project. The long-term goal is a professional design and manufacturing application built around accurate geometry, editable parameters, and dependable workflows.
 
-## Status
+> **Project stage:** foundational geometry library. This is not yet a desktop CAD application and does not yet produce OCCT solids.
 
-**Early foundation.** The repository contains the architecture proposal and an initial Rust geometry-values crate. OCCT-backed CAD operations and the desktop application are not implemented yet.
+## Goals
 
-## Architecture documents
+- Build accurate, unit-aware geometry in millimetres with explicit tolerances and useful validation errors.
+- Create a parametric document and feature-history system with safe regeneration and undo/redo.
+- Add jewellery workflows for rings, pendants, bangles, earrings, chains, gemstones, and settings.
+- Support manufacturing estimates and carefully verified import/export formats.
+- Keep geometry processing headless-testable, preserve user projects, and keep the core useful offline.
+- Explore AI-assisted design only through validated CAD commands; generated images are not manufacturing geometry.
+
+## What is implemented
+
+On `main` today:
+
+- Rust workspace and the `openjewelcad-geometry` crate.
+- Finite millimetre values, 3D points and vectors, displacement and distance, vector scaling, dot/cross products, and normalization.
+- Validated axis-aligned bounds with dimensions, volume, union, and tolerance-aware containment checks.
+- Typed errors for invalid numeric values, zero-length directions, invalid bounds, and invalid tolerances.
+- Unit tests for the geometry foundation.
+
+The Rust checks and seven unit tests passed on the current Windows development machine.
+
+## What is next
+
+1. Complete the Windows C++/OCCT dependency setup and build a real headless OCCT kernel.
+2. Establish and test the Rust/C++ C ABI with owned shape handles and structured errors.
+3. Add document persistence, typed commands, feature dependencies, and regeneration.
+4. Build the Qt desktop shell and viewport after the kernel/API boundary is validated.
+5. Add jewellery and gemstone workflows incrementally with geometry regression tests.
+
+See the [development roadmap](DEVELOPMENT_ROADMAP.md) for stage gates and the [architecture](ARCHITECTURE.md) for the proposed boundaries.
+
+## Technology direction
+
+- **Rust:** application services, project/document model, commands, persistence, and background work.
+- **C++ and OCCT:** CAD kernel operations and jewellery geometry.
+- **Qt 6:** Windows desktop interface and viewport integration.
+- **CMake and Cargo:** native and Rust builds.
+
+These are planned boundaries. Qt integration and OCCT kernel code are not yet part of the built application.
+
+## Build the Rust foundation (Windows)
+
+Install Rust with the MSVC toolchain and Visual Studio's **Desktop development with C++** workload. From the repository root:
+
+```powershell
+cargo check --workspace
+cargo test --workspace
+```
+
+The C++/OCCT build instructions will be added after the kernel dependency setup is reproducible.
+
+## Project documents
 
 - [Architecture](ARCHITECTURE.md)
 - [Development roadmap](DEVELOPMENT_ROADMAP.md)
 - [Technical decisions](TECHNICAL_DECISIONS.md)
 - [Contributor and agent instructions](AGENTS.md)
 
-## Direction
+## License
 
-The long-term goal includes parametric jewellery workflows, gemstones and settings, manufacturing calculations, file exchange, project libraries, and optional AI assistance. These are planned capabilities, not implemented features.
-
-No project license has been selected yet. Until one is added, all rights are reserved.
+No project license has been selected. Until a license is added, all rights are reserved. The selected OCCT distribution includes LGPL 2.1 with an additional exception; its notices and obligations must be documented before distributing builds.
