@@ -1,8 +1,8 @@
-# MeharajCAD project instructions
+# Open Jewel CAD project instructions
 
 ## Project status and scope
 
-- MeharajCAD is a planned Windows desktop jewellery CAD application. Treat roadmap items as proposals until implemented and reviewed.
+- Open Jewel CAD is a planned Windows desktop jewellery CAD application. Treat roadmap items as proposals until implemented and reviewed.
 - Keep changes small, coherent, and traceable. Do not claim a feature works unless it has been implemented and appropriately verified.
 - Do not begin broad product implementation while the architecture review is pending.
 
