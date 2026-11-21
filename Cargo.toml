@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/geometry", "crates/document"]
+members = ["crates/geometry", "crates/document", "crates/cad-ffi"]
 
 [workspace.package]
 edition = "2021"

@@ -65,6 +65,8 @@ extern "C" OJCAD_Status ojcad_box_create(double x_mm, double y_mm, double z_mm,
     }
 }
 
+extern "C" uint32_t ojcad_abi_version(void) { return 1; }
+
 extern "C" OJCAD_Status ojcad_shape_volume_mm3(const OJCAD_Shape* shape,
                                                  double* out_volume, OJCAD_Error* out_error) {
     clear_error(out_error);

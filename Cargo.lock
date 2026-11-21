@@ -3,6 +3,10 @@
 version = 3
 
 [[package]]
+name = "openjewelcad-cad-ffi"
+version = "0.1.0"
+
+[[package]]
 name = "openjewelcad-document"
 version = "0.1.0"
 

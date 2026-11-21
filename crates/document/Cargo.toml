@@ -5,4 +5,3 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 description = "Document identity and feature dependency foundation for Open Jewel CAD"
-

@@ -12,11 +12,11 @@ Record accepted decisions here. Proposed items remain open until reviewed; do no
 
 ## TD-002 — Use an opaque C ABI for Rust/C++ communication
 
-- **Status:** Proposed
-- **Decision:** Expose versioned C functions, opaque handles, fixed-layout data, explicit allocation/free routines, and structured error codes. Catch all C++ exceptions at the ABI boundary.
+- **Status:** Accepted for the initial kernel boundary
+- **Decision:** Expose a version-reporting C ABI, opaque shape handles, fixed-layout error values, and explicit shape destruction. Catch C++ exceptions at every operation boundary.
 - **Reason:** C ABI limits coupling and avoids exposing unstable C++ or OCCT types to Rust.
 - **Trade-off:** More explicit conversion code and API versioning work.
-- **Validation:** Add ABI compatibility and lifetime tests in Gate 1.
+- **Validation:** Rust checks the ABI version, owns handles with drop-based release, and integration-tests box construction, validity, volume, and structured argument errors.
 
 ## TD-003 — Keep internal geometry in millimetres
 

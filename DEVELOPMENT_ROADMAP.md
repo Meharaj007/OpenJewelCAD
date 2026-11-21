@@ -19,7 +19,7 @@ This roadmap is a sequence of reviewable gates. Dates and staffing estimates are
 
 **Exit:** clean checkout builds reproducibly; one geometry operation runs headlessly and through the ABI; dependency and license inventory is approved.
 
-**Progress:** The Windows MSVC/CMake/vcpkg toolchain is verified. OCCT 8.0.1 is pinned through the vcpkg baseline. A headless C++ API can create a box, report volume, and check validity; the CMake smoke test passes. Rust-to-C++ calls, Qt, and the final distribution license review remain open.
+**Progress:** The Windows MSVC/CMake/vcpkg toolchain is verified. OCCT 8.0.1 is pinned through the vcpkg baseline. A versioned C ABI can create an OCCT box, report volume, and check validity. Rust loads the DLL, owns the shape handle, and verifies the ABI version. CMake and Rust integration tests pass. Qt and the final distribution license review remain open.
 
 ## Gate 2 — Geometry foundation
 

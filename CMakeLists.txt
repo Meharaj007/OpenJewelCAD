@@ -8,15 +8,15 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(OpenCASCADE CONFIG REQUIRED)
 
-add_library(openjewelcad_kernel STATIC
+add_library(openjewelcad_kernel SHARED
     cpp/cad-kernel/src/cad_kernel.cpp
 )
+target_compile_definitions(openjewelcad_kernel PRIVATE OPENJEWELCAD_KERNEL_BUILD _USE_MATH_DEFINES)
 target_include_directories(openjewelcad_kernel
     PUBLIC include
     PRIVATE ${OpenCASCADE_INCLUDE_DIR}
 )
 target_link_libraries(openjewelcad_kernel PUBLIC ${OpenCASCADE_LIBRARIES})
-target_compile_definitions(openjewelcad_kernel PRIVATE _USE_MATH_DEFINES)
 
 add_executable(kernel_smoke apps/kernel-smoke/main.cpp)
 target_link_libraries(kernel_smoke PRIVATE openjewelcad_kernel)

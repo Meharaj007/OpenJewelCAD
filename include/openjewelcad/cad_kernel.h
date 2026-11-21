@@ -3,7 +3,13 @@
 
 #include <stdint.h>
 
-#define OJCAD_API
+#if defined(_WIN32) && defined(OPENJEWELCAD_KERNEL_BUILD)
+#  define OJCAD_API __declspec(dllexport)
+#elif defined(_WIN32)
+#  define OJCAD_API __declspec(dllimport)
+#else
+#  define OJCAD_API
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,6 +28,9 @@ typedef struct OJCAD_Error {
     OJCAD_Status code;
     char message[256];
 } OJCAD_Error;
+
+/// Return the C ABI version supported by this library.
+OJCAD_API uint32_t ojcad_abi_version(void);
 
 /// Create an axis-aligned box with positive dimensions in millimetres.
 OJCAD_API OJCAD_Status ojcad_box_create(double x_mm, double y_mm, double z_mm,
