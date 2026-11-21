@@ -2,7 +2,7 @@
 
 Open Jewel CAD is an early-stage, Windows-first jewellery CAD project. The long-term goal is a professional design and manufacturing application built around accurate geometry, editable parameters, and dependable workflows.
 
-> **Project stage:** foundational geometry library. This is not yet a desktop CAD application and does not yet produce OCCT solids.
+> **Project stage:** foundational Rust geometry and document model. This is not yet a desktop CAD application; OCCT kernel integration is in progress.
 
 ## Goals
 
@@ -21,15 +21,16 @@ On `main` today:
 - Finite millimetre values, 3D points and vectors, displacement and distance, vector scaling, dot/cross products, and normalization.
 - Validated axis-aligned bounds with dimensions, volume, union, and tolerance-aware containment checks.
 - Typed errors for invalid numeric values, zero-length directions, invalid bounds, and invalid tolerances.
-- Unit tests for the geometry foundation.
+- A document crate with stable feature IDs, dependency ordering, missing-reference and cycle checks, and revision tracking.
+- Unit tests for geometry and feature-graph behavior.
 
-The Rust checks and seven unit tests passed on the current Windows development machine.
+The Rust workspace check and all eleven unit tests passed on the current Windows development machine.
 
 ## What is next
 
-1. Complete the Windows C++/OCCT dependency setup and build a real headless OCCT kernel.
+1. Complete the Windows C++/OCCT dependency setup and compile the first real headless kernel operation.
 2. Establish and test the Rust/C++ C ABI with owned shape handles and structured errors.
-3. Add document persistence, typed commands, feature dependencies, and regeneration.
+3. Extend the document model with persistence, typed commands, parameters, regeneration, and undo/redo.
 4. Build the Qt desktop shell and viewport after the kernel/API boundary is validated.
 5. Add jewellery and gemstone workflows incrementally with geometry regression tests.
 
