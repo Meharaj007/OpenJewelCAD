@@ -1,6 +1,6 @@
-# MeharajCAD
+# Open Jewel CAD
 
-MeharajCAD is a planned Windows desktop application for professional jewellery design and manufacturing. The proposed foundation combines Rust application services, C++ CAD geometry, Open CASCADE Technology (OCCT), and Qt 6.
+Open Jewel CAD is a planned Windows desktop application for professional jewellery design and manufacturing. The proposed foundation combines Rust application services, C++ CAD geometry, Open CASCADE Technology (OCCT), and Qt 6.
 
 ## Status
 
