@@ -4,7 +4,7 @@ Open Jewel CAD is a planned Windows desktop application for professional jewelle
 
 ## Status
 
-**Architecture planning.** This repository does not yet contain a working CAD application. The first milestone is architecture review and a reproducible Windows toolchain spike.
+**Early foundation.** The repository contains the architecture proposal and an initial Rust geometry-values crate. OCCT-backed CAD operations and the desktop application are not implemented yet.
 
 ## Architecture documents
 
