@@ -67,6 +67,76 @@ impl Point3Mm {
     pub const fn coordinates_mm(self) -> (f64, f64, f64) {
         (self.x.as_mm(), self.y.as_mm(), self.z.as_mm())
     }
+
+    pub fn is_within(self, bounds: AxisAlignedBoxMm, tolerance: LengthMm) -> bool {
+        let (x, y, z) = self.coordinates_mm();
+        let (min, max) = bounds.corners_mm();
+        let t = tolerance.as_mm();
+        x >= min.0 - t
+            && x <= max.0 + t
+            && y >= min.1 - t
+            && y <= max.1 + t
+            && z >= min.2 - t
+            && z <= max.2 + t
+    }
+}
+
+/// A finite axis-aligned bounding box in millimetres.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AxisAlignedBoxMm {
+    min: Point3Mm,
+    max: Point3Mm,
+}
+
+impl AxisAlignedBoxMm {
+    pub fn new(min: Point3Mm, max: Point3Mm) -> Result<Self, GeometryError> {
+        let (min_x, min_y, min_z) = min.coordinates_mm();
+        let (max_x, max_y, max_z) = max.coordinates_mm();
+        if min_x > max_x || min_y > max_y || min_z > max_z {
+            return Err(GeometryError::InvalidBounds);
+        }
+        Ok(Self { min, max })
+    }
+
+    pub const fn corners_mm(self) -> ((f64, f64, f64), (f64, f64, f64)) {
+        (self.min.coordinates_mm(), self.max.coordinates_mm())
+    }
+
+    pub fn dimensions_mm(self) -> Result<(f64, f64, f64), GeometryError> {
+        let (min, max) = self.corners_mm();
+        Ok((
+            LengthMm::new(max.0 - min.0)?.as_mm(),
+            LengthMm::new(max.1 - min.1)?.as_mm(),
+            LengthMm::new(max.2 - min.2)?.as_mm(),
+        ))
+    }
+
+    pub fn volume_mm3(self) -> Result<f64, GeometryError> {
+        let (x, y, z) = self.dimensions_mm()?;
+        let volume = x * y * z;
+        if volume.is_finite() {
+            Ok(volume)
+        } else {
+            Err(GeometryError::NonFiniteValue)
+        }
+    }
+
+    pub fn union(self, other: Self) -> Result<Self, GeometryError> {
+        let (a_min, a_max) = self.corners_mm();
+        let (b_min, b_max) = other.corners_mm();
+        Self::new(
+            Point3Mm::new(
+                a_min.0.min(b_min.0),
+                a_min.1.min(b_min.1),
+                a_min.2.min(b_min.2),
+            )?,
+            Point3Mm::new(
+                a_max.0.max(b_max.0),
+                a_max.1.max(b_max.1),
+                a_max.2.max(b_max.2),
+            )?,
+        )
+    }
 }
 
 /// A finite direction or displacement vector.
@@ -165,6 +235,7 @@ pub enum GeometryError {
     NonFiniteValue,
     ZeroLengthDirection,
     ToleranceMustBePositive,
+    InvalidBounds,
 }
 
 impl fmt::Display for GeometryError {
@@ -173,6 +244,7 @@ impl fmt::Display for GeometryError {
             Self::NonFiniteValue => write!(f, "geometry values must be finite"),
             Self::ZeroLengthDirection => write!(f, "a zero-length vector has no direction"),
             Self::ToleranceMustBePositive => write!(f, "geometry tolerances must be positive"),
+            Self::InvalidBounds => write!(f, "bounding box minimum must not exceed its maximum"),
         }
     }
 }
@@ -246,5 +318,40 @@ mod tests {
         let tolerance = GeometryTolerance::new(0.01, 1e-6).unwrap();
         assert_eq!(tolerance.linear_mm(), 0.01);
         assert_eq!(tolerance.angular_radians(), 1e-6);
+    }
+
+    #[test]
+    fn bounding_box_reports_dimensions_volume_and_union() {
+        let a = AxisAlignedBoxMm::new(
+            Point3Mm::new(0.0, 0.0, 0.0).unwrap(),
+            Point3Mm::new(2.0, 3.0, 4.0).unwrap(),
+        )
+        .unwrap();
+        let b = AxisAlignedBoxMm::new(
+            Point3Mm::new(-1.0, 1.0, 2.0).unwrap(),
+            Point3Mm::new(1.0, 5.0, 3.0).unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(a.dimensions_mm().unwrap(), (2.0, 3.0, 4.0));
+        assert_eq!(a.volume_mm3().unwrap(), 24.0);
+        assert_eq!(
+            a.union(b).unwrap().corners_mm(),
+            ((-1.0, 0.0, 0.0), (2.0, 5.0, 4.0))
+        );
+        assert!(Point3Mm::new(2.005, 1.0, 1.0)
+            .unwrap()
+            .is_within(a, LengthMm::new(0.01).unwrap()));
+    }
+
+    #[test]
+    fn rejects_inverted_bounding_box() {
+        assert_eq!(
+            AxisAlignedBoxMm::new(
+                Point3Mm::new(1.0, 0.0, 0.0).unwrap(),
+                Point3Mm::new(0.0, 1.0, 1.0).unwrap()
+            ),
+            Err(GeometryError::InvalidBounds)
+        );
     }
 }
