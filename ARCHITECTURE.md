@@ -1,10 +1,10 @@
-# MeharajCAD architecture
+# Open Jewel CAD architecture
 
 **Status: proposed for review.** This document establishes an initial direction, not a claim that the listed components have already been built or compatibility-tested.
 
 ## 1. Goals and constraints
 
-MeharajCAD targets jewellery designers and manufacturers who need accurate editable models. The architecture should prioritize geometric correctness, explicit units and tolerances, predictable regeneration, recoverable documents, and a usable Windows desktop workflow.
+Open Jewel CAD targets jewellery designers and manufacturers who need accurate editable models. The architecture should prioritize geometric correctness, explicit units and tolerances, predictable regeneration, recoverable documents, and a usable Windows desktop workflow.
 
 The proposed stack is Rust application services, a C++ geometry library backed by OCCT, and a Qt 6 desktop shell. The CAD core should remain headless-capable so geometry tests do not need to launch the GUI.
 
@@ -47,7 +47,7 @@ Qt is C++, so the initial practical choice is a C++ Qt shell with a Rust core ac
 │   ├── cad-kernel/              # OCCT-backed geometry and validation
 │   ├── jewellery/               # reusable jewellery algorithms
 │   └── viewport/                # Qt/OCCT presentation adapter
-├── include/meharajcad/          # public C ABI headers
+├── include/openjewelcad/          # public C ABI headers
 ├── docs/                        # architecture and user/developer documentation
 ├── tests/
 │   ├── integration/
