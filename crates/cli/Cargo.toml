@@ -1,0 +1,11 @@
+[package]
+name = "openjewelcad-cli"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "First usable Open Jewel CAD box editor"
+
+[dependencies]
+openjewelcad-cad-ffi = { path = "../cad-ffi" }
+openjewelcad-geometry = { path = "../geometry" }

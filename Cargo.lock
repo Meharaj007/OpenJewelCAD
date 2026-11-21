@@ -7,6 +7,14 @@ name = "openjewelcad-cad-ffi"
 version = "0.1.0"
 
 [[package]]
+name = "openjewelcad-cli"
+version = "0.1.0"
+dependencies = [
+ "openjewelcad-cad-ffi",
+ "openjewelcad-geometry",
+]
+
+[[package]]
 name = "openjewelcad-document"
 version = "0.1.0"
 
