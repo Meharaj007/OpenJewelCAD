@@ -4,22 +4,22 @@ This roadmap is a sequence of reviewable gates. Dates and staffing estimates are
 
 ## Gate 0 — Architecture review
 
-- Review the proposed Rust/C++/Qt boundaries, document graph, geometry ownership, and persistence approach.
-- Resolve the release license, initial Qt edition, OCCT version and distribution plan.
+- Review the Rust/egui and C++/OCCT boundaries, document graph, geometry ownership, and persistence approach.
+- Resolve the release license, desktop dependency inventory, OCCT version and distribution plan.
 - Define measurable acceptance criteria for the first supported Windows build.
 
 **Exit:** reviewed architecture and recorded decisions; no broad feature implementation yet.
 
 ## Gate 1 — Reproducible toolchain spike
 
-- Build a minimal Qt desktop shell and a headless OCCT geometry library on supported Windows CI.
+- Build a minimal Rust/egui desktop shell and a headless OCCT geometry library on supported Windows CI.
 - Build a Rust crate and call a single C ABI operation in both directions needed by the application.
 - Verify ownership, error conversion, cancellation behavior, and clean shutdown.
-- Record exact compiler, Qt, OCCT, Rust, CMake, and dependency-manager versions and licenses.
+- Record exact compiler, Rust, OCCT, CMake, and dependency-manager versions and licenses.
 
 **Exit:** clean checkout builds reproducibly; one geometry operation runs headlessly and through the ABI; dependency and license inventory is approved.
 
-**Progress:** The Windows MSVC/CMake/vcpkg toolchain is verified. OCCT 8.0.1 is pinned through the vcpkg baseline. A versioned C ABI can create an OCCT box, report volume, and check validity. Rust loads the DLL, owns the shape handle, and verifies the ABI version. CMake and Rust integration tests pass. Qt and the final distribution license review remain open.
+**Progress:** The Windows MSVC/CMake/vcpkg toolchain is verified. OCCT 8.0.1 is pinned through the vcpkg baseline. A versioned C ABI can create an OCCT box, report volume, and check validity. Rust loads the DLL, owns the shape handle, and verifies the ABI version. A Rust/egui desktop prototype now provides box dimension controls, a rotatable shaded preview, project open/save, and OCCT regeneration. The preview is not yet built from OCCT tessellation; feature history, a full viewport, and the final distribution license review remain open.
 
 ## Gate 2 — Geometry foundation
 
@@ -76,6 +76,6 @@ This roadmap is a sequence of reviewable gates. Dates and staffing estimates are
 
 ## Risks that can change sequencing
 
-- Qt/OCCT/MSVC packaging compatibility or license constraints may require changing dependency versions or the UI/core boundary.
+- eframe/OCCT/MSVC packaging compatibility or license constraints may require changing dependency versions or the UI/core boundary.
 - Unstable topology references may require a semantic naming strategy before advanced parametric features.
 - Real-world jewellery workflows may change which generator should be first; validate with target designers before expanding feature scope.

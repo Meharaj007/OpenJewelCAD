@@ -1,3 +1,5 @@
+mod gui;
+
 use openjewelcad_cad_ffi::Kernel;
 use openjewelcad_geometry::LengthMm;
 use std::env;
@@ -126,6 +128,12 @@ fn load_model(path: &Path) -> Result<BoxModel, Box<dyn Error>> {
 fn run() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().skip(1).collect();
     match args.as_slice() {
+        [] => launch_gui(),
+        [command] if command == "gui" => launch_gui(),
+        [command] if command == "--help" || command == "help" => {
+            print_help();
+            Ok(())
+        }
         [command, action, file, width, depth, height]
             if command == "box" && (action == "new" || action == "edit") =>
         {
@@ -139,14 +147,20 @@ fn run() -> Result<(), Box<dyn Error>> {
         }
         [command, file] if command == "inspect" => inspect(Path::new(file)),
         _ => {
-            println!("Open Jewel CAD — first box editor\n\nCommands:\n  openjewelcad box new <project.ojcad> <width_mm> <depth_mm> <height_mm>\n  openjewelcad box edit <project.ojcad> <width_mm> <depth_mm> <height_mm>\n  openjewelcad inspect <project.ojcad>\n\nSet OPENJEWELCAD_KERNEL_DLL to the built kernel DLL and include its folder on PATH.");
-            if args.is_empty() {
-                Ok(())
-            } else {
-                Err("invalid command; run without arguments for help".into())
-            }
+            print_help();
+            Err("invalid command; run with --help to see available commands".into())
         }
     }
+}
+
+fn launch_gui() -> Result<(), Box<dyn Error>> {
+    gui::launch().map_err(|error| -> Box<dyn Error> {
+        format!("could not start Open Jewel CAD: {error}").into()
+    })
+}
+
+fn print_help() {
+    println!("Open Jewel CAD — simple parametric box editor\n\nCommands:\n  openjewelcad                 Open the desktop editor\n  openjewelcad gui             Open the desktop editor\n  openjewelcad box new <file> <width_mm> <depth_mm> <height_mm>\n  openjewelcad box edit <file> <width_mm> <depth_mm> <height_mm>\n  openjewelcad inspect <file>\n\nThe desktop editor needs OPENJEWELCAD_KERNEL_DLL set to the built kernel DLL and its folder on PATH.");
 }
 
 fn inspect(path: &Path) -> Result<(), Box<dyn Error>> {

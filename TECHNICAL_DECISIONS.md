@@ -2,13 +2,14 @@
 
 Record accepted decisions here. Proposed items remain open until reviewed; do not infer approval from their presence.
 
-## TD-001 — Separate application orchestration from geometry
+## TD-001 — Use a Rust desktop shell with a separate OCCT kernel
 
-- **Status:** Proposed
-- **Decision:** Rust coordinates application services and document workflows; a C++ library owns OCCT geometry operations; Qt handles desktop presentation.
-- **Reason:** This follows the project’s language goals while keeping geometry testable without the GUI.
-- **Trade-off:** Adds FFI, packaging, and debugging complexity across two toolchains.
-- **Validation:** Gate 1 must build a Windows integration spike and exercise ownership, errors, cancellation, and shutdown.
+- **Status:** Accepted for the initial editor
+- **Decision:** Rust owns desktop presentation and application workflows through eframe/egui; a C++ library owns OCCT geometry operations behind the existing safe Rust wrapper and versioned C ABI.
+- **Reason:** The user prioritizes a quick, lightweight editor, and this avoids a separate Qt toolchain and runtime while keeping the kernel headless-capable.
+- **Trade-off:** The first preview is a simple projection from dimensions, not an OCCT-meshed viewport. A later feature-rich renderer may need a separate integration spike.
+- **Dependencies:** eframe 0.37.0 (MIT OR Apache-2.0), rfd 0.18.0 (MIT), Rust 1.95 or newer. Exact Rust dependency resolution is recorded in Cargo.lock.
+- **Validation:** Built and opened on Windows; dimension editing, box rotation, and OCCT regeneration were exercised. OCCT reported the default box valid with a volume of 200 mm³.
 
 ## TD-002 — Use an opaque C ABI for Rust/C++ communication
 
@@ -34,18 +35,18 @@ Record accepted decisions here. Proposed items remain open until reviewed; do no
 - **Trade-off:** Regeneration can fail across kernel/version changes; migration and cache invalidation need design.
 - **Validation:** Save/load, regeneration, and migration fixtures in Gate 3.
 
-## TD-005 — Defer exact dependency versions and packaging selection
+## TD-005 — Pin the initial Windows dependency set
 
-- **Status:** Open
-- **Decision:** Select exact Qt, OCCT, Rust, compiler, and package-manager versions only after a Windows build spike and license review.
-- **Reason:** The brief names technologies but does not establish compatible pinned versions or a distribution model.
-- **Next step:** Record versions, platform matrix, and license inventory at Gate 1.
+- **Status:** Accepted for the initial editor; release packaging remains open
+- **Decision:** Use Rust 1.95+, eframe 0.37.0, rfd 0.18.0, OCCT 8.0.1, and the existing Windows MSVC/CMake/vcpkg toolchain.
+- **Reason:** This combination builds and runs the first desktop editor on the current Windows machine.
+- **Next step:** Verify clean-machine packaging and finish the license inventory before distribution.
 
 ## TD-006 — License and distribution model
 
 - **Status:** Open
 - **Decision:** No source or product license has been selected.
-- **Reason:** Qt edition, OCCT obligations, third-party dependencies, and commercial distribution must be considered together.
+- **Reason:** OCCT obligations, third-party dependencies, and commercial distribution must be considered together.
 - **Next step:** Decide before publishing a license or shipping binaries.
 
 ## TD-007 — Pin OCCT through the vcpkg manifest

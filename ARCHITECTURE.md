@@ -1,41 +1,40 @@
 # Open Jewel CAD architecture
 
-**Status: proposed for review.** This document establishes an initial direction, not a claim that the listed components have already been built or compatibility-tested.
+**Status: initial implementation direction.** The first desktop workflow now runs in Rust with eframe/egui; this document describes that direction and the boundaries still to validate at product scale.
 
 ## 1. Goals and constraints
 
 Open Jewel CAD targets jewellery designers and manufacturers who need accurate editable models. The architecture should prioritize geometric correctness, explicit units and tolerances, predictable regeneration, recoverable documents, and a usable Windows desktop workflow.
 
-The proposed stack is Rust application services, a C++ geometry library backed by OCCT, and a Qt 6 desktop shell. The CAD core should remain headless-capable so geometry tests do not need to launch the GUI.
+The initial stack is a Rust application and eframe/egui desktop shell, plus a C++ geometry library backed by OCCT. This avoids a separate Qt toolchain and runtime for the first editor. Keep the CAD core headless-capable so geometry checks do not need to launch the GUI.
 
 ## 2. System boundaries
 
 ```text
-Qt desktop (C++)  ── UI adapter / C ABI client ── Rust application core
-       │                                             │
-       └── viewport adapter                          ├── project & document services
-                                                     ├── command/history coordinator
-C++ geometry library (OCCT) ── stable C ABI ────────┤── persistence & task scheduler
-                                                     └── optional AI/plugin adapters
+Rust desktop shell (eframe/egui)
+       │
+       └── Rust application and project services
+                    │
+                    └── safe Rust wrapper ── stable C ABI ── C++ geometry library (OCCT)
 ```
 
-The interface direction is intentionally narrow. The UI sends typed application requests; Rust validates them and schedules work; geometry requests cross a C ABI into the C++ kernel. The C++ library returns owned result handles or structured errors. No arbitrary module calls across language boundaries.
+The interface direction is intentionally narrow. The desktop sends typed parameter values to Rust application code; Rust validates them and calls the safe kernel wrapper; geometry requests cross the C ABI into the C++ kernel. The C++ library returns owned result handles or structured errors. No arbitrary module calls across language boundaries.
 
 ### Responsibilities
 
-- **Qt desktop:** menus, panels, property editing, user input, viewport presentation, and UI-thread event handling.
+- **Rust desktop (eframe/egui):** menus, panels, property editing, user input, preview presentation, and UI-thread event handling.
 - **Rust application core:** document lifecycle, commands, parameter values, dependency scheduling, persistence orchestration, undo/redo coordination, background work, and plugin/AI policy.
 - **C++ CAD library:** OCCT shape construction and operations, validation, unit-aware geometry helpers, meshing requests, import/export adapters, and jewellery-specific geometry algorithms.
 - **Persistence:** versioned project archive/manifest and a transactional metadata/library database. Geometry serialization format remains a decision to verify; do not assume that serializing native OCCT objects is a stable interchange format.
 
-Qt is C++, so the initial practical choice is a C++ Qt shell with a Rust core accessed through C ABI. This avoids an additional Rust-to-Qt binding layer. The viewport can call a small C++ adapter around OCCT visualization while all document changes remain command-driven through the application core. Whether this is the final UI split should be validated with a thin integration spike.
+The current editor uses Rust/egui for a compact native window and the existing safe Rust wrapper for kernel operations. Its shaded box preview is projected from the feature dimensions; it is not yet an OCCT-meshed viewport. Keep presentation code separate from kernel algorithms, and revisit renderer and UI choices when the full feature-history workflow is designed.
 
 ## 3. Suggested repository layout
 
 ```text
 .
 ├── apps/
-│   └── desktop/                 # Qt executable and UI adapters
+│   └── cli/                     # desktop editor, CLI commands, and project-file handling
 ├── crates/
 │   ├── app-core/                # orchestration and application services
 │   ├── document/                # document model and schema versions
@@ -46,7 +45,7 @@ Qt is C++, so the initial practical choice is a C++ Qt shell with a Rust core ac
 │   ├── cad-api/                 # exported C ABI, handles, error mapping
 │   ├── cad-kernel/              # OCCT-backed geometry and validation
 │   ├── jewellery/               # reusable jewellery algorithms
-│   └── viewport/                # Qt/OCCT presentation adapter
+│   └── viewport/                # future OCCT visualization and tessellation helpers
 ├── include/openjewelcad/          # public C ABI headers
 ├── docs/                        # architecture and user/developer documentation
 ├── tests/
@@ -97,7 +96,7 @@ Undo/redo should operate at the application command/document transaction layer. 
 
 ## 7. Threading and memory model
 
-- Qt widgets and viewport presentation state stay on the GUI thread.
+- eframe/egui widgets and viewport presentation state stay on the GUI thread.
 - Rust owns task scheduling, cancellation, progress, and document transaction sequencing.
 - CPU-heavy independent geometry operations may run on workers only after the OCCT operation and data-sharing constraints are verified. Treat kernel shapes as immutable across worker boundaries unless an operation explicitly clones them.
 - A document transaction commits only if its captured input revision is still current; stale asynchronous results are discarded.
@@ -106,8 +105,8 @@ Undo/redo should operate at the application command/document transaction layer. 
 
 ## 8. Risks and open questions
 
-1. **Windows dependency integration:** Qt, OCCT, MSVC runtime, and Rust target compatibility must be proven together. Choose exact versions only after a reproducible build spike.
-2. **C++ Qt plus Rust core complexity:** two build systems and FFI increase packaging and debugging cost. Keep the boundary small; compare a Rust-owned UI alternative only if Qt integration proves too costly.
+1. **Windows dependency integration:** eframe/egui, OCCT, MSVC runtime, and Rust target compatibility must be proven in clean builds and packaging.
+2. **UI and viewport scale:** the current egui preview is a simple projected box. A future tessellated, selectable OCCT viewport may require a dedicated rendering adapter; keep this separate from document and kernel ownership.
 3. **OCCT licensing and distribution:** review the selected release's license, third-party notices, and obligations with the product's distribution model before shipping.
 4. **Parametric stability:** topology references can become unstable after edits. Use semantic feature references where possible and design recovery behavior for failed downstream features.
 5. **Manufacturing trust:** kernel validity does not prove castability or printability. Manufacturing checks need documented domain rules and independent regression fixtures.
@@ -116,4 +115,4 @@ Undo/redo should operate at the application command/document transaction layer. 
 
 ## 9. Dependency and license policy
 
-The proposed stack includes Rust, CMake, Qt 6, OCCT, SQLite, MSVC, and possibly openNURBS, GoogleTest/Catch2, and a package manager. Exact versions and license texts must be recorded in a dependency inventory before integration. Qt edition/license choice and OCCT distribution obligations are release-blocking decisions. Do not add dependencies solely because they appear in the original wishlist.
+The initial stack includes Rust 1.95+, eframe 0.37.0 (MIT OR Apache-2.0), rfd 0.18.0 (MIT), CMake, OCCT 8.0.1, and MSVC. Cargo.lock records the Rust dependency resolution. SQLite, openNURBS, and additional test frameworks remain unselected. Record license texts and distribution obligations before shipping builds; do not add dependencies solely because they appear in the original wishlist.
