@@ -68,6 +68,8 @@ The viewport uses a fast curve/profile preview while editing and switches to exa
 
 Install Visual Studio with **Desktop development with C++**, CMake, Git, and vcpkg. Set `VCPKG_ROOT` to the vcpkg checkout that matches the baseline pinned in `vcpkg.json`. From a Visual Studio Developer PowerShell at the repository root:
 
+After building the OCCT kernel once, double-click [Start-OpenJewelCAD.bat](Start-OpenJewelCAD.bat) to open the desktop editor. The launcher finds the Debug or Release kernel, builds the Rust app if its executable is missing, and sets the kernel DLL search path for startup. A fresh checkout still needs the native kernel prerequisites installed and built first.
+
 ```powershell
 $env:VCPKG_ROOT = "$HOME\Documents\vcpkg"
 cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows
