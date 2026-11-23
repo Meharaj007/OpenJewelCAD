@@ -319,6 +319,41 @@ int main() {
               << revolved_bezier_properties[1] << " mm^2\n";
     ojcad_shape_destroy(revolved_bezier_surface);
 
+    OJCAD_Shape* partial_revolved_bezier_surface = nullptr;
+    double partial_revolved_bezier_properties[5]{};
+    double partial_revolved_bezier_bounds[6]{};
+    int32_t partial_revolved_bezier_valid = 0;
+    if (ojcad_revolved_bezier_surface_angle_create(
+            revolved_bezier_control_points, 4, 90.0, &partial_revolved_bezier_surface,
+            &curve_error) != OJCAD_STATUS_OK ||
+        ojcad_shape_mass_properties(partial_revolved_bezier_surface,
+                                    partial_revolved_bezier_properties, &curve_error) !=
+            OJCAD_STATUS_OK ||
+        ojcad_shape_bounds_mm(partial_revolved_bezier_surface, partial_revolved_bezier_bounds,
+                               &curve_error) != OJCAD_STATUS_OK ||
+        ojcad_shape_is_valid(partial_revolved_bezier_surface, &partial_revolved_bezier_valid,
+                              &curve_error) != OJCAD_STATUS_OK ||
+        partial_revolved_bezier_valid != 1 ||
+        std::abs(partial_revolved_bezier_properties[1] - 10.0 * std::acos(-1.0)) > 0.5) {
+        std::cerr << "OCCT partial revolved Bezier surface failed: " << curve_error.message
+                  << "; valid=" << partial_revolved_bezier_valid
+                  << ", area=" << partial_revolved_bezier_properties[1] << '\n';
+        ojcad_shape_destroy(partial_revolved_bezier_surface);
+        return 1;
+    }
+    const double expected_partial_revolved_bezier_bounds[] = {0.0, -2.0, -5.0, 5.0, 2.0, 0.0};
+    for (int index = 0; index < 6; ++index) {
+        if (std::abs(partial_revolved_bezier_bounds[index] -
+                     expected_partial_revolved_bezier_bounds[index]) > 1e-5) {
+            std::cerr << "OCCT partial revolved Bezier surface bounds failed\n";
+            ojcad_shape_destroy(partial_revolved_bezier_surface);
+            return 1;
+        }
+    }
+    std::cout << "Valid 90-degree revolved cubic Bezier surface; area="
+              << partial_revolved_bezier_properties[1] << " mm^2\n";
+    ojcad_shape_destroy(partial_revolved_bezier_surface);
+
     const double revolved_open_profile[] = {5.0, -2.0, 5.0, 2.0};
     OJCAD_Shape* revolved_surface = nullptr;
     double revolved_surface_properties[5]{};

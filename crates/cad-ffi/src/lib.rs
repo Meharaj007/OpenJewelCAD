@@ -58,6 +58,8 @@ type ExtrudedPolygon =
 type ExtrudedPolylineVector =
     unsafe extern "C" fn(*const f64, u32, f64, f64, f64, f64, *mut *mut c_void, *mut CError) -> i32;
 type PolygonFeature = unsafe extern "C" fn(*const f64, u32, *mut *mut c_void, *mut CError) -> i32;
+type RevolveFeature =
+    unsafe extern "C" fn(*const f64, u32, f64, *mut *mut c_void, *mut CError) -> i32;
 type Tessellate =
     unsafe extern "C" fn(*const c_void, f64, f64, *mut *mut c_void, *mut CError) -> i32;
 type MeshCounts = unsafe extern "C" fn(*const c_void, *mut u64, *mut u64, *mut CError) -> i32;
@@ -187,8 +189,8 @@ struct Api {
     extruded_open_polyline_surface_vector_create: ExtrudedPolylineVector,
     bezier_curve_create: PolygonFeature,
     extruded_bezier_surface_vector_create: ExtrudedPolylineVector,
-    revolved_bezier_surface_create: PolygonFeature,
-    revolved_open_polyline_surface_create: PolygonFeature,
+    revolved_bezier_surface_angle_create: RevolveFeature,
+    revolved_open_polyline_surface_angle_create: RevolveFeature,
     closed_polyline_create: PolygonFeature,
     open_polyline_curve_create: PolygonFeature,
     planar_polygon_surface_create: PolygonFeature,
@@ -234,9 +236,9 @@ impl Kernel {
         let api = unsafe {
             let abi_version: AbiVersion = library.symbol(b"ojcad_abi_version\0")?;
             let actual = abi_version();
-            if actual != 25 {
+            if actual != 26 {
                 return Err(KernelError::IncompatibleAbi {
-                    expected: 25,
+                    expected: 26,
                     actual,
                 });
             }
@@ -261,10 +263,10 @@ impl Kernel {
                 bezier_curve_create: library.symbol(b"ojcad_bezier_curve_create\0")?,
                 extruded_bezier_surface_vector_create: library
                     .symbol(b"ojcad_extruded_bezier_surface_vector_create\0")?,
-                revolved_bezier_surface_create: library
-                    .symbol(b"ojcad_revolved_bezier_surface_create\0")?,
-                revolved_open_polyline_surface_create: library
-                    .symbol(b"ojcad_revolved_open_polyline_surface_create\0")?,
+                revolved_bezier_surface_angle_create: library
+                    .symbol(b"ojcad_revolved_bezier_surface_angle_create\0")?,
+                revolved_open_polyline_surface_angle_create: library
+                    .symbol(b"ojcad_revolved_open_polyline_surface_angle_create\0")?,
                 closed_polyline_create: library.symbol(b"ojcad_closed_polyline_create\0")?,
                 open_polyline_curve_create: library
                     .symbol(b"ojcad_open_polyline_curve_create\0")?,
@@ -749,6 +751,15 @@ impl Kernel {
         &self,
         control_points_xy_mm: &[[f64; 2]],
     ) -> Result<Shape, KernelError> {
+        self.revolved_bezier_surface_angle_mm(control_points_xy_mm, 360.0)
+    }
+
+    /// Revolve a cubic Bezier curve around the Y axis into an open surface shell.
+    pub fn revolved_bezier_surface_angle_mm(
+        &self,
+        control_points_xy_mm: &[[f64; 2]],
+        angle_deg: f64,
+    ) -> Result<Shape, KernelError> {
         let point_count =
             u32::try_from(control_points_xy_mm.len()).map_err(|_| KernelError::Operation {
                 status: 1,
@@ -762,7 +773,13 @@ impl Kernel {
         let mut raw = std::ptr::null_mut();
         let mut error = CError::default();
         let status = unsafe {
-            (self.api.revolved_bezier_surface_create)(points, point_count, &mut raw, &mut error)
+            (self.api.revolved_bezier_surface_angle_create)(
+                points,
+                point_count,
+                angle_deg,
+                &mut raw,
+                &mut error,
+            )
         };
         self.finish_shape_creation(status, raw, error)
     }
@@ -949,6 +966,15 @@ impl Kernel {
         &self,
         points_xy_mm: &[[f64; 2]],
     ) -> Result<Shape, KernelError> {
+        self.revolved_open_polyline_surface_angle_mm(points_xy_mm, 360.0)
+    }
+
+    /// Revolve an open XY radius/height profile around +Y through an angle in (0, 360].
+    pub fn revolved_open_polyline_surface_angle_mm(
+        &self,
+        points_xy_mm: &[[f64; 2]],
+        angle_deg: f64,
+    ) -> Result<Shape, KernelError> {
         let point_count =
             u32::try_from(points_xy_mm.len()).map_err(|_| KernelError::Operation {
                 status: 1,
@@ -962,9 +988,10 @@ impl Kernel {
         let mut raw = std::ptr::null_mut();
         let mut error = CError::default();
         let status = unsafe {
-            (self.api.revolved_open_polyline_surface_create)(
+            (self.api.revolved_open_polyline_surface_angle_create)(
                 points,
                 point_count,
+                angle_deg,
                 &mut raw,
                 &mut error,
             )
@@ -1698,6 +1725,22 @@ mod tests {
             kernel.revolved_open_polyline_surface_mm(&[[0.0, -2.0], [0.0, 2.0]]),
             Err(KernelError::Operation { status: 1, .. })
         ));
+        let quarter = kernel
+            .revolved_open_polyline_surface_angle_mm(&[[5.0, -2.0], [5.0, 2.0]], 90.0)
+            .unwrap();
+        assert!(quarter.is_valid().unwrap());
+        assert!((quarter.mass_properties().unwrap()[1] - 10.0 * std::f64::consts::PI).abs() < 1e-6);
+        for (actual, expected) in quarter
+            .bounds_mm()
+            .unwrap()
+            .into_iter()
+            .zip([0.0, -2.0, -5.0, 5.0, 2.0, 0.0])
+        {
+            assert!((actual - expected).abs() < 1e-5);
+        }
+        assert!(kernel
+            .revolved_open_polyline_surface_angle_mm(&[[5.0, -2.0], [5.0, 2.0]], 0.0)
+            .is_err());
     }
 
     #[test]
@@ -1866,6 +1909,29 @@ mod tests {
             kernel.revolved_bezier_surface_mm(&[[0.0, -2.0], [5.0, -1.0], [5.0, 1.0], [5.0, 2.0]]),
             Err(KernelError::Operation { status: 1, .. })
         ));
+        let quarter = kernel
+            .revolved_bezier_surface_angle_mm(&control_points, 90.0)
+            .unwrap();
+        assert!(quarter.is_valid().unwrap());
+        let expected_quarter_area = 10.0 * std::f64::consts::PI;
+        assert!(
+            (quarter.mass_properties().unwrap()[1] - expected_quarter_area).abs()
+                < expected_quarter_area * 1e-2
+        );
+        for (actual, expected) in quarter
+            .bounds_mm()
+            .unwrap()
+            .into_iter()
+            .zip([0.0, -2.0, -5.0, 5.0, 2.0, 0.0])
+        {
+            assert!((actual - expected).abs() < 1e-5);
+        }
+        for invalid_angle in [0.0, 360.1, f64::NAN] {
+            assert!(matches!(
+                kernel.revolved_bezier_surface_angle_mm(&control_points, invalid_angle),
+                Err(KernelError::Operation { status: 1, .. })
+            ));
+        }
     }
 
     #[test]

@@ -159,10 +159,18 @@ OJCAD_API OJCAD_Status ojcad_extruded_open_polyline_surface_vector_create(
 OJCAD_API OJCAD_Status ojcad_revolved_open_polyline_surface_create(
     const double* points_xy_mm, uint32_t point_count,
     OJCAD_Shape** out_shape, OJCAD_Error* out_error);
+/// Revolve an open radius/height profile around +Y through an angle in (0, 360] degrees.
+OJCAD_API OJCAD_Status ojcad_revolved_open_polyline_surface_angle_create(
+    const double* points_xy_mm, uint32_t point_count, double angle_deg,
+    OJCAD_Shape** out_shape, OJCAD_Error* out_error);
 /// Revolve a cubic Bezier curve around +Y into a 360-degree surface shell.
 /// Every control point must stay at positive X radius from the axis.
 OJCAD_API OJCAD_Status ojcad_revolved_bezier_surface_create(
     const double* control_points_xy_mm, uint32_t point_count,
+    OJCAD_Shape** out_shape, OJCAD_Error* out_error);
+/// Revolve a cubic Bezier curve around +Y through an angle in (0, 360] degrees.
+OJCAD_API OJCAD_Status ojcad_revolved_bezier_surface_angle_create(
+    const double* control_points_xy_mm, uint32_t point_count, double angle_deg,
     OJCAD_Shape** out_shape, OJCAD_Error* out_error);
 /// Create a planar face from a simple closed XY polygon in millimetres.
 OJCAD_API OJCAD_Status ojcad_planar_polygon_surface_create(const double* points_xy_mm,

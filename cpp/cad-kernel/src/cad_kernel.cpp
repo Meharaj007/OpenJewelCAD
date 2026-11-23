@@ -538,7 +538,7 @@ extern "C" OJCAD_Status ojcad_brilliant_gem_create(double diameter_mm, double to
     }, out_shape, out_error);
 }
 
-extern "C" uint32_t ojcad_abi_version(void) { return 25; }
+extern "C" uint32_t ojcad_abi_version(void) { return 26; }
 
 extern "C" OJCAD_Status ojcad_circle_curve_create(double radius_mm,
                                                     OJCAD_Shape** out_shape,
@@ -968,6 +968,13 @@ extern "C" OJCAD_Status ojcad_extruded_bezier_surface_vector_create(
 extern "C" OJCAD_Status ojcad_revolved_bezier_surface_create(
     const double* control_points_xy_mm, uint32_t point_count,
     OJCAD_Shape** out_shape, OJCAD_Error* out_error) {
+    return ojcad_revolved_bezier_surface_angle_create(
+        control_points_xy_mm, point_count, 360.0, out_shape, out_error);
+}
+
+extern "C" OJCAD_Status ojcad_revolved_bezier_surface_angle_create(
+    const double* control_points_xy_mm, uint32_t point_count, double angle_deg,
+    OJCAD_Shape** out_shape, OJCAD_Error* out_error) {
     clear_error(out_error);
     if (control_points_xy_mm == nullptr || out_shape == nullptr) {
         set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
@@ -978,6 +985,11 @@ extern "C" OJCAD_Status ojcad_revolved_bezier_surface_create(
     if (point_count != 4) {
         set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
                   "a revolved cubic Bezier surface requires exactly four XY control points");
+        return OJCAD_STATUS_INVALID_ARGUMENT;
+    }
+    if (!std::isfinite(angle_deg) || angle_deg <= 0.0 || angle_deg > 360.0) {
+        set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
+                  "revolution angle must be a finite value in (0, 360] degrees");
         return OJCAD_STATUS_INVALID_ARGUMENT;
     }
     std::array<gp_Pnt, 4> control_points;
@@ -1001,11 +1013,12 @@ extern "C" OJCAD_Status ojcad_revolved_bezier_surface_create(
                   "a cubic Bezier curve needs distinct start and end control points");
         return OJCAD_STATUS_INVALID_ARGUMENT;
     }
-    return create_shape([control_points]() {
+    const double angle_rad = angle_deg * std::acos(-1.0) / 180.0;
+    return create_shape([control_points, angle_rad]() {
         const TopoDS_Wire wire = bezier_wire(control_points);
         if (wire.IsNull()) return TopoDS_Shape{};
         const gp_Ax1 axis(gp_Pnt(0.0, 0.0, 0.0), gp_Dir(0.0, 1.0, 0.0));
-        BRepPrimAPI_MakeRevol revolution(wire, axis, 2.0 * std::acos(-1.0), true);
+        BRepPrimAPI_MakeRevol revolution(wire, axis, angle_rad, true);
         revolution.Build();
         return revolution.IsDone() ? revolution.Shape() : TopoDS_Shape{};
     }, out_shape, out_error);
@@ -1073,6 +1086,13 @@ extern "C" OJCAD_Status ojcad_extruded_open_polyline_surface_vector_create(
 extern "C" OJCAD_Status ojcad_revolved_open_polyline_surface_create(
     const double* points_xy_mm, uint32_t point_count,
     OJCAD_Shape** out_shape, OJCAD_Error* out_error) {
+    return ojcad_revolved_open_polyline_surface_angle_create(
+        points_xy_mm, point_count, 360.0, out_shape, out_error);
+}
+
+extern "C" OJCAD_Status ojcad_revolved_open_polyline_surface_angle_create(
+    const double* points_xy_mm, uint32_t point_count, double angle_deg,
+    OJCAD_Shape** out_shape, OJCAD_Error* out_error) {
     clear_error(out_error);
     if (points_xy_mm == nullptr || out_shape == nullptr) {
         set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
@@ -1083,6 +1103,11 @@ extern "C" OJCAD_Status ojcad_revolved_open_polyline_surface_create(
     if (point_count < 2 || point_count > 64) {
         set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
                   "revolved surface profile needs 2..=64 points");
+        return OJCAD_STATUS_INVALID_ARGUMENT;
+    }
+    if (!std::isfinite(angle_deg) || angle_deg <= 0.0 || angle_deg > 360.0) {
+        set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
+                  "revolution angle must be a finite value in (0, 360] degrees");
         return OJCAD_STATUS_INVALID_ARGUMENT;
     }
     auto points = read_xy_points(points_xy_mm, point_count);
@@ -1108,12 +1133,13 @@ extern "C" OJCAD_Status ojcad_revolved_open_polyline_surface_create(
             }
         }
     }
-    return create_shape([points = std::move(points)]() {
+    const double angle_rad = angle_deg * std::acos(-1.0) / 180.0;
+    return create_shape([points = std::move(points), angle_rad]() {
         BRepBuilderAPI_MakePolygon profile;
         for (const gp_Pnt& point : points) profile.Add(point);
         if (!profile.IsDone()) return TopoDS_Shape{};
         const gp_Ax1 axis(gp_Pnt(0.0, 0.0, 0.0), gp_Dir(0.0, 1.0, 0.0));
-        BRepPrimAPI_MakeRevol revolution(profile.Wire(), axis, 2.0 * std::acos(-1.0), true);
+        BRepPrimAPI_MakeRevol revolution(profile.Wire(), axis, angle_rad, true);
         revolution.Build();
         return revolution.IsDone() ? revolution.Shape() : TopoDS_Shape{};
     }, out_shape, out_error);
