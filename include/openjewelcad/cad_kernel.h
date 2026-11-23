@@ -82,6 +82,11 @@ OJCAD_API OJCAD_Status ojcad_planar_circle_surface_create(double radius_mm,
 OJCAD_API OJCAD_Status ojcad_extruded_circle_create(double radius_mm, double height_mm,
                                                       OJCAD_Shape** out_shape,
                                                       OJCAD_Error* out_error);
+/// Extrude a circular profile by height along a 3D direction, normalized internally.
+/// The vector must include a non-zero Z component to create a solid.
+OJCAD_API OJCAD_Status ojcad_extruded_circle_vector_create(
+    double radius_mm, double height_mm, double direction_x, double direction_y,
+    double direction_z, OJCAD_Shape** out_shape, OJCAD_Error* out_error);
 /// Create a closed analytic ellipse wire centered at the origin in XY.
 OJCAD_API OJCAD_Status ojcad_ellipse_curve_create(double radius_x_mm, double radius_y_mm,
                                                    OJCAD_Shape** out_shape,
@@ -96,6 +101,12 @@ OJCAD_API OJCAD_Status ojcad_extruded_ellipse_create(double radius_x_mm, double 
                                                      double height_mm,
                                                      OJCAD_Shape** out_shape,
                                                      OJCAD_Error* out_error);
+/// Extrude an elliptical profile by height along a 3D direction, normalized internally.
+/// The vector must include a non-zero Z component to create a solid.
+OJCAD_API OJCAD_Status ojcad_extruded_ellipse_vector_create(
+    double radius_x_mm, double radius_y_mm, double height_mm,
+    double direction_x, double direction_y, double direction_z,
+    OJCAD_Shape** out_shape, OJCAD_Error* out_error);
 /// Create an open circular arc in XY. Start angle is measured CCW from +X; sweep is positive.
 OJCAD_API OJCAD_Status ojcad_arc_curve_create(double radius_mm, double start_angle_deg,
                                                double sweep_angle_deg,
@@ -149,6 +160,12 @@ OJCAD_API OJCAD_Status ojcad_extruded_polygon_create(const double* points_xy_mm,
                                                       double height_mm,
                                                       OJCAD_Shape** out_shape,
                                                       OJCAD_Error* out_error);
+/// Extrude a closed polygon by height along a 3D direction, normalized internally.
+/// The vector must include a non-zero Z component to create a solid.
+OJCAD_API OJCAD_Status ojcad_extruded_polygon_vector_create(
+    const double* points_xy_mm, uint32_t point_count, double height_mm,
+    double direction_x, double direction_y, double direction_z,
+    OJCAD_Shape** out_shape, OJCAD_Error* out_error);
 /// Revolve a simple XY polygon profile around the Y axis to make a 360-degree solid.
 /// Every profile point must have a positive X coordinate, which represents radius in millimetres.
 OJCAD_API OJCAD_Status ojcad_revolved_polygon_create(const double* points_xy_mm,

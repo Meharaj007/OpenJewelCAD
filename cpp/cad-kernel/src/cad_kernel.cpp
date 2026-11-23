@@ -149,6 +149,27 @@ TopoDS_Wire ellipse_wire(double radius_x_mm, double radius_y_mm) {
     return wire.Wire();
 }
 
+bool make_extrusion_displacement(double height_mm, double direction_x, double direction_y,
+                                double direction_z, gp_Vec& displacement) {
+    const double direction_length = std::hypot(std::hypot(direction_x, direction_y), direction_z);
+    if (!std::isfinite(height_mm) || height_mm <= 0.0 || height_mm > 1e7 ||
+        !std::isfinite(direction_x) || !std::isfinite(direction_y) ||
+        !std::isfinite(direction_z) || !std::isfinite(direction_length) ||
+        direction_length <= 1e-12) {
+        return false;
+    }
+    displacement = gp_Vec(direction_x, direction_y, direction_z) * (height_mm / direction_length);
+    return true;
+}
+
+bool make_solid_extrusion_displacement(double height_mm, double direction_x, double direction_y,
+                                       double direction_z, gp_Vec& displacement) {
+    const double direction_length = std::hypot(std::hypot(direction_x, direction_y), direction_z);
+    return make_extrusion_displacement(height_mm, direction_x, direction_y, direction_z,
+                                       displacement) &&
+           std::abs(direction_z) > direction_length * 1e-12;
+}
+
 TopoDS_Shape make_round_brilliant(double diameter_mm, double total_height_mm,
                                  double table_diameter_mm) {
     static constexpr int segments = 32;
@@ -502,7 +523,7 @@ extern "C" OJCAD_Status ojcad_brilliant_gem_create(double diameter_mm, double to
     }, out_shape, out_error);
 }
 
-extern "C" uint32_t ojcad_abi_version(void) { return 22; }
+extern "C" uint32_t ojcad_abi_version(void) { return 23; }
 
 extern "C" OJCAD_Status ojcad_circle_curve_create(double radius_mm,
                                                     OJCAD_Shape** out_shape,
@@ -549,22 +570,35 @@ extern "C" OJCAD_Status ojcad_planar_circle_surface_create(double radius_mm,
 extern "C" OJCAD_Status ojcad_extruded_circle_create(double radius_mm, double height_mm,
                                                       OJCAD_Shape** out_shape,
                                                       OJCAD_Error* out_error) {
+    return ojcad_extruded_circle_vector_create(radius_mm, height_mm, 0.0, 0.0, 1.0,
+                                              out_shape, out_error);
+}
+
+extern "C" OJCAD_Status ojcad_extruded_circle_vector_create(
+    double radius_mm, double height_mm, double direction_x, double direction_y,
+    double direction_z, OJCAD_Shape** out_shape, OJCAD_Error* out_error) {
     clear_error(out_error);
     if (out_shape == nullptr) {
         set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT, "output shape pointer is required");
         return OJCAD_STATUS_INVALID_ARGUMENT;
     }
     *out_shape = nullptr;
-    if (!std::isfinite(radius_mm) || !std::isfinite(height_mm) ||
-        radius_mm <= 0.0 || height_mm <= 0.0 || radius_mm > 1e7 || height_mm > 1e7) {
+    gp_Vec displacement;
+    if (!std::isfinite(radius_mm) || radius_mm <= 0.0 || radius_mm > 1e7 ||
+        !make_solid_extrusion_displacement(height_mm, direction_x, direction_y, direction_z,
+                                           displacement)) {
         set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
-                  "circle extrusion radius and height must be finite positive values within 10,000,000 mm");
+                  "circle solid extrusion needs a finite positive radius and height, and a finite direction with a non-zero Z component");
         return OJCAD_STATUS_INVALID_ARGUMENT;
     }
     return create_shape([=]() {
-        BRepPrimAPI_MakeCylinder builder(radius_mm, height_mm);
-        builder.Build();
-        return builder.IsDone() ? builder.Shape() : TopoDS_Shape{};
+        const TopoDS_Wire wire = circle_wire(radius_mm);
+        if (wire.IsNull()) return TopoDS_Shape{};
+        BRepBuilderAPI_MakeFace face(wire);
+        if (!face.IsDone()) return TopoDS_Shape{};
+        BRepPrimAPI_MakePrism prism(face.Face(), displacement);
+        prism.Build();
+        return prism.IsDone() ? prism.Shape() : TopoDS_Shape{};
     }, out_shape, out_error);
 }
 
@@ -617,17 +651,27 @@ extern "C" OJCAD_Status ojcad_extruded_ellipse_create(double radius_x_mm, double
                                                        double height_mm,
                                                        OJCAD_Shape** out_shape,
                                                        OJCAD_Error* out_error) {
+    return ojcad_extruded_ellipse_vector_create(radius_x_mm, radius_y_mm, height_mm,
+                                               0.0, 0.0, 1.0, out_shape, out_error);
+}
+
+extern "C" OJCAD_Status ojcad_extruded_ellipse_vector_create(
+    double radius_x_mm, double radius_y_mm, double height_mm,
+    double direction_x, double direction_y, double direction_z,
+    OJCAD_Shape** out_shape, OJCAD_Error* out_error) {
     clear_error(out_error);
     if (out_shape == nullptr) {
         set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT, "output shape pointer is required");
         return OJCAD_STATUS_INVALID_ARGUMENT;
     }
     *out_shape = nullptr;
+    gp_Vec displacement;
     if (!std::isfinite(radius_x_mm) || !std::isfinite(radius_y_mm) ||
-        !std::isfinite(height_mm) || radius_x_mm <= 0.0 || radius_y_mm <= 0.0 ||
-        height_mm <= 0.0 || radius_x_mm > 1e7 || radius_y_mm > 1e7 || height_mm > 1e7) {
+        radius_x_mm <= 0.0 || radius_y_mm <= 0.0 || radius_x_mm > 1e7 || radius_y_mm > 1e7 ||
+        !make_solid_extrusion_displacement(height_mm, direction_x, direction_y, direction_z,
+                                           displacement)) {
         set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
-                  "ellipse extrusion radii and height must be finite positive values within 10,000,000 mm");
+                  "ellipse solid extrusion needs finite positive radii and height, and a finite direction with a non-zero Z component");
         return OJCAD_STATUS_INVALID_ARGUMENT;
     }
     return create_shape([=]() {
@@ -635,7 +679,7 @@ extern "C" OJCAD_Status ojcad_extruded_ellipse_create(double radius_x_mm, double
         if (wire.IsNull()) return TopoDS_Shape{};
         BRepBuilderAPI_MakeFace face(wire);
         if (!face.IsDone()) return TopoDS_Shape{};
-        BRepPrimAPI_MakePrism prism(face.Face(), gp_Vec(0.0, 0.0, height_mm));
+        BRepPrimAPI_MakePrism prism(face.Face(), displacement);
         prism.Build();
         return prism.IsDone() ? prism.Shape() : TopoDS_Shape{};
     }, out_shape, out_error);
@@ -961,6 +1005,14 @@ extern "C" OJCAD_Status ojcad_extruded_polygon_create(const double* points_xy_mm
                                                        double height_mm,
                                                        OJCAD_Shape** out_shape,
                                                        OJCAD_Error* out_error) {
+    return ojcad_extruded_polygon_vector_create(points_xy_mm, point_count, height_mm,
+                                                0.0, 0.0, 1.0, out_shape, out_error);
+}
+
+extern "C" OJCAD_Status ojcad_extruded_polygon_vector_create(
+    const double* points_xy_mm, uint32_t point_count, double height_mm,
+    double direction_x, double direction_y, double direction_z,
+    OJCAD_Shape** out_shape, OJCAD_Error* out_error) {
     clear_error(out_error);
     if (points_xy_mm == nullptr || out_shape == nullptr) {
         set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
@@ -968,9 +1020,12 @@ extern "C" OJCAD_Status ojcad_extruded_polygon_create(const double* points_xy_mm
         return OJCAD_STATUS_INVALID_ARGUMENT;
     }
     *out_shape = nullptr;
-    if (point_count < 3 || point_count > 64 || !std::isfinite(height_mm) || height_mm <= 0.0) {
+    gp_Vec displacement;
+    if (point_count < 3 || point_count > 64 ||
+        !make_solid_extrusion_displacement(height_mm, direction_x, direction_y, direction_z,
+                                           displacement)) {
         set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
-                  "polygon extrusion needs 3..=64 points and a finite positive height");
+                  "polygon solid extrusion needs 3..=64 points, a finite positive height, and a finite direction with a non-zero Z component");
         return OJCAD_STATUS_INVALID_ARGUMENT;
     }
 
@@ -1010,14 +1065,14 @@ extern "C" OJCAD_Status ojcad_extruded_polygon_create(const double* points_xy_mm
         return OJCAD_STATUS_INVALID_ARGUMENT;
     }
 
-    return create_shape([points = std::move(points), height_mm]() {
+    return create_shape([points = std::move(points), displacement]() {
         BRepBuilderAPI_MakePolygon wire_builder;
         for (const gp_Pnt& point : points) wire_builder.Add(point);
         wire_builder.Close();
         if (!wire_builder.IsDone()) return TopoDS_Shape{};
         BRepBuilderAPI_MakeFace face_builder(wire_builder.Wire());
         if (!face_builder.IsDone()) return TopoDS_Shape{};
-        BRepPrimAPI_MakePrism prism(face_builder.Face(), gp_Vec(0.0, 0.0, height_mm));
+        BRepPrimAPI_MakePrism prism(face_builder.Face(), displacement);
         prism.Build();
         return prism.IsDone() ? prism.Shape() : TopoDS_Shape{};
     }, out_shape, out_error);

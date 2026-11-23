@@ -2387,7 +2387,17 @@ fn draw_primitive_preview(
             && profile.points().iter().any(|point| point[0] <= 1e-9))
         || (kind.uses_profile() && super::validate_polygon_profile(profile.points()).is_err())
         || (kind.uses_vector_extrusion()
-            && super::validate_extrusion_direction(extrusion_direction).is_err());
+            && super::validate_extrusion_direction(extrusion_direction).is_err())
+        || (matches!(
+            kind,
+            PrimitiveKind::ExtrudedPolygon
+                | PrimitiveKind::ExtrudedCircle
+                | PrimitiveKind::ExtrudedEllipse
+        ) && extrusion_direction[2].abs()
+            <= extrusion_direction[0]
+                .hypot(extrusion_direction[1])
+                .hypot(extrusion_direction[2])
+                * 1e-12);
     if cached_mesh.is_none() && invalid {
         painter.text(
             rect.center(),
@@ -2424,13 +2434,21 @@ fn draw_primitive_preview(
             profile,
             line,
             open_polyline,
+            extrusion_direction,
             transform,
         );
         if let Some(pattern) = pattern {
             mesh = array_preview_mesh(
                 &mesh,
                 pattern,
-                preview_extent(kind, parameters, profile, line, open_polyline),
+                preview_model_extent(
+                    kind,
+                    parameters,
+                    profile,
+                    line,
+                    open_polyline,
+                    extrusion_direction,
+                ),
             );
         }
         mesh
@@ -2722,11 +2740,19 @@ fn make_preview_mesh(
         PrimitiveKind::PlanarEllipseSurface => {
             planar_surface_preview_mesh(ellipse_profile(parameters[0], parameters[1]))
         }
-        PrimitiveKind::ExtrudedPolygon => polygon_prism_preview_mesh(profile, parameters[0]),
-        PrimitiveKind::ExtrudedCircle => cylinder_preview_mesh(parameters[0], parameters[1]),
-        PrimitiveKind::ExtrudedEllipse => {
-            polygon_prism_preview_mesh(ellipse_profile(parameters[0], parameters[1]), parameters[2])
+        PrimitiveKind::ExtrudedPolygon => {
+            polygon_prism_preview_mesh(profile, parameters[0], extrusion_direction)
         }
+        PrimitiveKind::ExtrudedCircle => polygon_prism_preview_mesh(
+            circle_profile(parameters[0]),
+            parameters[1],
+            extrusion_direction,
+        ),
+        PrimitiveKind::ExtrudedEllipse => polygon_prism_preview_mesh(
+            ellipse_profile(parameters[0], parameters[1]),
+            parameters[2],
+            extrusion_direction,
+        ),
         PrimitiveKind::RevolvedSolid => revolved_profile_preview_mesh(profile),
     }
 }
@@ -2926,9 +2952,17 @@ fn transform_preview_mesh(
     profile: PolygonProfile,
     line: LineFeature,
     open_polyline: OpenPolylineFeature,
+    extrusion_direction: [f64; 3],
     transform: TransformParams,
 ) {
-    let extent = preview_extent(kind, parameters, profile, line, open_polyline);
+    let extent = preview_model_extent(
+        kind,
+        parameters,
+        profile,
+        line,
+        open_polyline,
+        extrusion_direction,
+    );
     let angles = transform.rotation_deg.map(f64::to_radians);
     let (sin_x, cos_x) = angles[0].sin_cos();
     let (sin_y, cos_y) = angles[1].sin_cos();
@@ -3049,6 +3083,43 @@ fn preview_extent(
     }
 }
 
+fn preview_model_extent(
+    kind: PrimitiveKind,
+    parameters: [f64; 3],
+    profile: PolygonProfile,
+    line: LineFeature,
+    open_polyline: OpenPolylineFeature,
+    extrusion_direction: [f64; 3],
+) -> f64 {
+    let mut extent = preview_extent(kind, parameters, profile, line, open_polyline);
+    let (profile, height) = match kind {
+        PrimitiveKind::ExtrudedPolygon => (Some(profile), parameters[0]),
+        PrimitiveKind::ExtrudedCircle => (Some(circle_profile(parameters[0])), parameters[1]),
+        PrimitiveKind::ExtrudedEllipse => (
+            Some(ellipse_profile(parameters[0], parameters[1])),
+            parameters[2],
+        ),
+        _ => (None, 0.0),
+    };
+    if let Some(profile) = profile {
+        let length = extrusion_direction[0]
+            .hypot(extrusion_direction[1])
+            .hypot(extrusion_direction[2]);
+        if length.is_finite() && length > 1e-12 && height.is_finite() {
+            let offset = extrusion_direction.map(|component| component / length * height);
+            for point in profile.points() {
+                extent = extent
+                    .max(point[0].abs())
+                    .max(point[1].abs())
+                    .max((point[0] + offset[0]).abs())
+                    .max((point[1] + offset[1]).abs())
+                    .max(offset[2].abs());
+            }
+        }
+    }
+    extent.max(1e-6)
+}
+
 fn round_brilliant_preview_mesh(parameters: [f64; 3]) -> PreviewMesh {
     const SEGMENTS: usize = 32;
     let diameter = parameters[0];
@@ -3121,21 +3192,31 @@ fn preview_triangle(vertices: &[[f32; 3]], indices: [usize; 3]) -> PreviewFace {
     )
 }
 
-fn polygon_prism_preview_mesh(profile: PolygonProfile, height_mm: f64) -> PreviewMesh {
+fn polygon_prism_preview_mesh(
+    profile: PolygonProfile,
+    height_mm: f64,
+    direction: [f64; 3],
+) -> PreviewMesh {
     let points = profile.points();
     let count = points.len();
-    let extent = preview_extent(
-        PrimitiveKind::ExtrudedPolygon,
-        [height_mm, 0.0, 0.0],
-        profile,
-        LineFeature::default(),
-        OpenPolylineFeature::default(),
-    );
+    let length = direction[0].hypot(direction[1]).hypot(direction[2]);
+    if !length.is_finite() || length <= 1e-12 || !height_mm.is_finite() {
+        return PreviewMesh {
+            vertices: Vec::new(),
+            faces: Vec::new(),
+        };
+    }
+    let offset = direction.map(|component| component / length * height_mm);
+    let extent = vector_extrusion_preview_extent(profile, height_mm, direction);
     let mut vertices = Vec::with_capacity(count * 2);
-    for z in [0.0, height_mm] {
-        for point in points {
-            vertices.push(scaled_point([point[0], point[1], z], extent));
-        }
+    for point in points {
+        vertices.push(scaled_point([point[0], point[1], 0.0], extent));
+    }
+    for point in points {
+        vertices.push(scaled_point(
+            [point[0] + offset[0], point[1] + offset[1], offset[2]],
+            extent,
+        ));
     }
 
     let mut faces = Vec::with_capacity(count * 4);
@@ -3145,33 +3226,72 @@ fn polygon_prism_preview_mesh(profile: PolygonProfile, height_mm: f64) -> Previe
         let dx = points[next][0] - points[index][0];
         let dy = points[next][1] - points[index][1];
         let normal = if orientation > 0.0 {
-            [dy as f32, -dx as f32, 0.0]
+            [
+                dy * offset[2],
+                -dx * offset[2],
+                dx * offset[1] - dy * offset[0],
+            ]
         } else {
-            [-dy as f32, dx as f32, 0.0]
+            [
+                -dy * offset[2],
+                dx * offset[2],
+                dy * offset[0] - dx * offset[1],
+            ]
         };
         faces.push(preview_face(
             &[index, next, count + next, count + index],
-            normal,
+            normal.map(|v| v as f32),
         ));
     }
 
     if let Some(triangles) = triangulate_polygon(points) {
+        let top_matches_profile = orientation * offset[2] > 0.0;
         for triangle in triangles {
+            let base = [triangle[0], triangle[1], triangle[2]];
+            let top = [
+                count + triangle[0],
+                count + triangle[1],
+                count + triangle[2],
+            ];
             faces.push(preview_triangle(
                 &vertices,
-                [triangle[0], triangle[2], triangle[1]],
+                if top_matches_profile {
+                    [base[0], base[2], base[1]]
+                } else {
+                    base
+                },
             ));
             faces.push(preview_triangle(
                 &vertices,
-                [
-                    count + triangle[0],
-                    count + triangle[1],
-                    count + triangle[2],
-                ],
+                if top_matches_profile {
+                    top
+                } else {
+                    [top[0], top[2], top[1]]
+                },
             ));
         }
     }
     PreviewMesh { vertices, faces }
+}
+
+fn vector_extrusion_preview_extent(
+    profile: PolygonProfile,
+    height_mm: f64,
+    direction: [f64; 3],
+) -> f64 {
+    let length = direction[0].hypot(direction[1]).hypot(direction[2]);
+    if !length.is_finite() || length <= 1e-12 || !height_mm.is_finite() {
+        return 1.0;
+    }
+    let offset = direction.map(|component| component / length * height_mm);
+    profile.points().iter().fold(1e-6_f64, |extent, point| {
+        extent
+            .max(point[0].abs())
+            .max(point[1].abs())
+            .max((point[0] + offset[0]).abs())
+            .max((point[1] + offset[1]).abs())
+            .max(offset[2].abs())
+    })
 }
 
 fn polyline_curve_preview_mesh(profile: PolygonProfile) -> PreviewMesh {
@@ -3667,3 +3787,35 @@ fn shade(base: [u8; 3], brightness: f32) -> Color32 {
 
 #[allow(dead_code)]
 fn _keep_vec2_type_import_used(_: Vec2) {}
+
+#[cfg(test)]
+mod preview_tests {
+    use super::*;
+
+    #[test]
+    fn angled_closed_profile_preview_tracks_direction_and_stays_fitted() {
+        let profile = circle_profile(2.0);
+        let direction = [0.0, 3.0, 4.0];
+        let mesh = polygon_prism_preview_mesh(profile, 5.0, direction);
+        assert_eq!(mesh.vertices.len(), 128);
+        assert!(mesh.faces.len() > 64);
+        for vertex in &mesh.vertices {
+            assert!(vertex.iter().all(|coordinate| coordinate.is_finite()));
+            assert!(vertex
+                .iter()
+                .all(|coordinate| coordinate.abs() <= 1.0 + 1e-6));
+        }
+
+        let extent = vector_extrusion_preview_extent(profile, 5.0, direction);
+        let first_top_vertex = mesh.vertices[64];
+        for (actual, expected) in first_top_vertex.into_iter().zip([0.4, 0.6, 0.8]) {
+            assert!((f64::from(actual) - expected).abs() < 1e-6);
+        }
+        assert!((extent - 5.0).abs() < 1e-9);
+        assert!(mesh
+            .faces
+            .iter()
+            .flat_map(|face| &face.indices)
+            .all(|index| *index < mesh.vertices.len()));
+    }
+}

@@ -2,7 +2,7 @@
 
 Open Jewel CAD is an early-stage, Windows-first jewellery CAD project. The long-term goal is a professional design and manufacturing application built around accurate geometry, editable parameters, and dependable workflows.
 
-> **Project stage:** the desktop editor now follows curve → surface → solid paths: edit closed profiles, create planar faces, extrude closed profiles and open line/polyline/arc curves into surface shells, revolve an open profile into a surface, or revolve a positive-radius section into a solid. It also creates analytic circles and ellipses; eight solid primitives; a parametric ring band; and a faceted round-brilliant stone. It supports transforms and arrays, B-rep union/difference/intersection with a second primitive, OCCT measurements, and binary STL or OBJ export. Broader jewellery builders and brush-based sculpting remain planned.
+> **Project stage:** the desktop editor now follows curve → surface → solid paths: edit closed profiles, create planar faces, extrude closed profiles along editable 3D directions, extrude open line/polyline/arc curves into surface shells, revolve an open profile into a surface, or revolve a positive-radius section into a solid. It also creates analytic circles and ellipses; eight solid primitives; a parametric ring band; and a faceted round-brilliant stone. It supports transforms and arrays, B-rep union/difference/intersection with a second primitive, OCCT measurements, and binary STL or OBJ export. Broader jewellery builders and brush-based sculpting remain planned.
 
 ## Goals
 
@@ -23,7 +23,7 @@ Current implementation:
 - Validated axis-aligned bounds with dimensions, volume, union, and tolerance-aware containment checks.
 - Typed errors for invalid numeric values, zero-length directions, invalid bounds, and invalid tolerances.
 - A document crate with stable feature IDs, dependency ordering, missing-reference and cycle checks, and revision tracking.
-- A C++ OCCT kernel exposed through ABI version 22: create solid primitives, open lines and polylines, arcs, closed polygons, circles, and ellipses; planar faces, exact open line/polyline/arc and revolved-profile surface shells, extruded profiles, and revolved solids; transform, mirror, boolean-combine, and array shapes; and report length, mass properties, bounds, and validity.
+- A C++ OCCT kernel exposed through ABI version 23: create solid primitives, open lines and polylines, arcs, closed polygons, circles, and ellipses; planar faces, exact open line/polyline/arc and revolved-profile surface shells, closed-profile extrusions along editable 3D directions, and revolved solids; transform, mirror, boolean-combine, and array shapes; and report length, mass properties, bounds, and validity.
 - A Rust FFI crate that loads the kernel DLL, checks its ABI version, owns shape handles safely, and converts kernel errors.
 - A Rust desktop app that opens to a project manager with create/open actions, a persisted recent-project list, and a folder browser for `.ojcad` files.
 - A modern dark editor workspace with a left primitive toolbox, fitted and clipped central viewport, isometric/top/front/right views, shaded/edge display modes, right-side dimensions, move/rotate/scale controls, save controls, and OCCT regeneration and validation.
@@ -34,10 +34,10 @@ Current implementation:
 - Editable linear and circular arrays with up to 64 copies, non-degenerate spacing/angle validation, exact OCCT compound geometry, and a responsive fitted preview.
 - A ring band generator with editable inner diameter, wall thickness, and band width, built and measured as an exact OCCT hollow solid.
 - A round-brilliant gemstone generator with editable girdle diameter, total height, and table diameter. OCCT builds a closed faceted solid that can be transformed, measured, boolean-combined, and exported.
-- An editable polygon profile with 3–64 vertices, live coordinate editing, self-intersection validation, exact OCCT extrusion along +Z, and 360° revolve around the Y axis when all profile points stay at positive radius. The curve editor builds dimensioned rectangles, regular polygons, and ring cross sections; generated points stay editable.
-- Rhino-style workflows: create a closed polyline curve, convert it into a planar surface, then extrude or revolve that same profile into a solid. Open line, polyline, and arc curves can be extruded along any non-zero 3D direction; open polyline profiles can also be revolved around Y to form valid surface shells. Project version 15 introduced revolved surfaces; version 16 stores world-plane mirror settings and version 17 stores extrusion directions; versions 1 through 16 remain readable.
-- A circle workflow: create a true OCCT circle curve, convert it to a planar disk, and extrude the same saved radius into a cylinder. Project version 7 introduced these stages; current saves use version 17.
-- An ellipse workflow: create an exact OCCT ellipse, convert it to a planar face, then extrude the saved X/Y radii into a solid. Project version 8 introduced these stages; current saves use version 17.
+- An editable polygon profile with 3–64 vertices, live coordinate editing, self-intersection validation, exact OCCT extrusion along an editable 3D direction, and 360° revolve around the Y axis when all profile points stay at positive radius. The curve editor builds dimensioned rectangles, regular polygons, and ring cross sections; generated points stay editable.
+- Rhino-style workflows: create a closed polyline curve, convert it into a planar surface, then extrude or revolve that same profile into a solid. Open line, polyline, and arc curves can be extruded along any non-zero 3D direction; open polyline profiles can also be revolved around Y to form valid surface shells. Project version 15 introduced revolved surfaces, version 16 stores world-plane mirror settings, version 17 stores open-curve extrusion directions, and version 18 adds directions for closed-profile solids; versions 1 through 17 remain readable.
+- A circle workflow: create a true OCCT circle curve, convert it to a planar disk, and extrude the same saved radius into a cylinder along a chosen 3D direction. Project version 7 introduced these stages; current saves use version 18.
+- An ellipse workflow: create an exact OCCT ellipse, convert it to a planar face, then extrude the saved X/Y radii into a solid along a chosen 3D direction. Project version 8 introduced these stages; current saves use version 18.
 - An open arc curve with editable radius, start angle, and counter-clockwise sweep. It is saved as an exact OCCT circular edge; introduced in project version 9.
 - An open line curve with editable XY endpoints, exact OCCT geometry, length validation, and a two-endpoint preview. Project version 10 introduced endpoint persistence.
 - An open polyline with 2–64 ordered editable XY points, exact OCCT wire geometry, measured length, endpoint markers, and project persistence introduced in version 11.
@@ -62,7 +62,7 @@ See the [development roadmap](DEVELOPMENT_ROADMAP.md) for stage gates and the [a
 - **C++ and OCCT:** CAD kernel operations and jewellery geometry.
 - **CMake and Cargo:** native and Rust builds.
 
-The viewport uses a fast curve/profile preview while editing and switches to exact OCCT tessellation after regeneration. Orbit, wheel zoom, middle-button pan, and Fit keep the model easy to frame inside the clipped view. Mesh export uses OCCT tessellation at 0.05 mm linear deflection and 0.35 rad angular deflection. New `.ojcad` saves use version 17 for editable extrusion directions; versions 1 through 16 still open.
+The viewport uses a fast curve/profile preview while editing and switches to exact OCCT tessellation after regeneration. Orbit, wheel zoom, middle-button pan, and Fit keep the model easy to frame inside the clipped view. Mesh export uses OCCT tessellation at 0.05 mm linear deflection and 0.35 rad angular deflection. New `.ojcad` saves use version 18 for editable closed-profile extrusion directions; versions 1 through 17 still open.
 
 ## Build and test (Windows)
 

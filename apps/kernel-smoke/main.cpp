@@ -89,10 +89,54 @@ int main() {
                                                                  OJCAD_Error* error) {
             return ojcad_extruded_polygon_create(rectangular_profile, 4, 2.0, shape, error);
         }, 24.0) ||
+        !check_shape("directional extruded polygon", [&rectangular_profile](OJCAD_Shape** shape,
+                                                                               OJCAD_Error* error) {
+            return ojcad_extruded_polygon_vector_create(rectangular_profile, 4, 5.0,
+                                                         0.0, 3.0, 4.0, shape, error);
+        }, 48.0) ||
+        !check_shape("directional extruded circle", [](OJCAD_Shape** shape,
+                                                          OJCAD_Error* error) {
+            return ojcad_extruded_circle_vector_create(2.0, 5.0, 0.0, 3.0, 4.0,
+                                                        shape, error);
+        }, 16.0 * std::acos(-1.0)) ||
+        !check_shape("directional extruded ellipse", [](OJCAD_Shape** shape,
+                                                           OJCAD_Error* error) {
+            return ojcad_extruded_ellipse_vector_create(4.0, 2.0, 5.0, 0.0, 3.0, 4.0,
+                                                         shape, error);
+        }, 32.0 * std::acos(-1.0)) ||
         !check_shape("revolved profile", [&revolve_profile](OJCAD_Shape** shape,
                                                               OJCAD_Error* error) {
             return ojcad_revolved_polygon_create(revolve_profile, 4, shape, error);
         }, 64.0 * std::acos(-1.0))) {
+        return 1;
+    }
+
+    OJCAD_Shape* directional_polygon = nullptr;
+    OJCAD_Error directional_error{};
+    double directional_bounds[6]{};
+    if (ojcad_extruded_polygon_vector_create(rectangular_profile, 4, 5.0, 0.0, 3.0, 4.0,
+                                              &directional_polygon, &directional_error) !=
+            OJCAD_STATUS_OK ||
+        ojcad_shape_bounds_mm(directional_polygon, directional_bounds, &directional_error) !=
+            OJCAD_STATUS_OK ||
+        std::abs(directional_bounds[0]) > 1e-7 ||
+        std::abs(directional_bounds[1]) > 1e-7 ||
+        std::abs(directional_bounds[2]) > 1e-7 ||
+        std::abs(directional_bounds[3] - 4.0) > 1e-7 ||
+        std::abs(directional_bounds[4] - 6.0) > 1e-7 ||
+        std::abs(directional_bounds[5] - 4.0) > 1e-7) {
+        std::cerr << "OCCT directional polygon extrusion bounds failed: "
+                  << directional_error.message << '\n';
+        ojcad_shape_destroy(directional_polygon);
+        return 1;
+    }
+    ojcad_shape_destroy(directional_polygon);
+
+    OJCAD_Shape* flat_solid = nullptr;
+    if (ojcad_extruded_circle_vector_create(2.0, 5.0, 1.0, 0.0, 0.0, &flat_solid,
+                                             &directional_error) == OJCAD_STATUS_OK) {
+        std::cerr << "OCCT accepted a zero-volume horizontal solid extrusion\n";
+        ojcad_shape_destroy(flat_solid);
         return 1;
     }
 
