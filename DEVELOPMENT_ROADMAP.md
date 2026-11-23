@@ -2,6 +2,8 @@
 
 This roadmap is a sequence of reviewable gates. Dates and staffing estimates are intentionally omitted until the architecture and toolchain are validated.
 
+The complete command catalog, dependency mapping, test expectations, and user-requested nine-phase feature order are in [TOOL_INVENTORY.md](TOOL_INVENTORY.md). The phases describe feature delivery; the gates below remain prerequisites and release checks.
+
 ## Gate 0 — Architecture review
 
 - Review the Rust/egui and C++/OCCT boundaries, document graph, geometry ownership, and persistence approach.
@@ -19,7 +21,7 @@ This roadmap is a sequence of reviewable gates. Dates and staffing estimates are
 
 **Exit:** clean checkout builds reproducibly; one geometry operation runs headlessly and through the ABI; dependency and license inventory is approved.
 
-**Progress:** The Windows MSVC/CMake/vcpkg toolchain is verified. OCCT 8.0.1 is pinned through the vcpkg baseline. ABI version 2 creates boxes, cylinders, spheres, and tori, and reports volume and validity. Rust owns the handles through the safe FFI wrapper. The Rust/egui desktop editor has a primitive selector, dimension controls, project open/save, and OCCT regeneration. The lightweight preview mesh is parameter-driven rather than OCCT-tessellated; booleans, feature history, a full viewport, and the final distribution license review remain open.
+**Progress:** The Windows MSVC/CMake/vcpkg toolchain is verified and OCCT 8.0.1 is pinned. ABI version 22 creates open lines and polylines, arcs, polygon/circle/ellipse curves, planar faces, open-curve extrusion surfaces along any non-zero 3D direction, revolved open-profile surfaces, closed-profile extrusions, and 360° revolved solids through curve → surface → solid workflows; it also supports primitive generators, transforms, world-plane mirrors, booleans, arrays, measurements, validity checks, and tessellation for STL/OBJ export. The Rust/egui desktop app organizes tools by modeling stage, provides a Ctrl+K searchable picker, edits curve direction, closure, and extrusion direction, mirrors models and Boolean tools, and displays exact OCCT results after regeneration. Project version 17 stores extrusion directions and retains mirror settings; versions 1 through 16 remain readable. Multi-feature history, general curve/surface tools, topology picking, broader jewelry generators, ZBrush-inspired sculpting, and distribution license review remain open.
 
 ## Gate 2 — Geometry foundation
 

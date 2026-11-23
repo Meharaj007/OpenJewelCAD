@@ -6,6 +6,8 @@
 
 Open Jewel CAD targets jewellery designers and manufacturers who need accurate editable models. The architecture should prioritize geometric correctness, explicit units and tolerances, predictable regeneration, recoverable documents, and a usable Windows desktop workflow.
 
+The product direction combines Rhino-style precision modeling and dimensional control with a ZBrush-inspired sculpt workflow for organic jewellery forms. Keep both workflows available in one project while storing B-rep features and sculpt meshes with the representations and validation rules each requires.
+
 The initial stack is a Rust application and eframe/egui desktop shell, plus a C++ geometry library backed by OCCT. This avoids a separate Qt toolchain and runtime for the first editor. Keep the CAD core headless-capable so geometry checks do not need to launch the GUI.
 
 ## 2. System boundaries
@@ -27,7 +29,7 @@ The interface direction is intentionally narrow. The desktop sends typed paramet
 - **C++ CAD library:** OCCT shape construction and operations, validation, unit-aware geometry helpers, meshing requests, import/export adapters, and jewellery-specific geometry algorithms.
 - **Persistence:** versioned project archive/manifest and a transactional metadata/library database. Geometry serialization format remains a decision to verify; do not assume that serializing native OCCT objects is a stable interchange format.
 
-The current editor uses Rust/egui for a compact native window and the safe Rust wrapper for kernel operations. Its shaded previews are generated from primitive parameters; they are not yet OCCT-meshed viewport geometry. Keep presentation code separate from kernel algorithms, and revisit renderer and UI choices when the full feature-history workflow is designed.
+The current editor uses Rust/egui for a compact native window and the safe Rust wrapper for kernel operations. It shows a fast parameter preview during edits and the exact OCCT tessellation after regeneration; both fit their projected bounds to the viewport. Sculpt editing is not yet implemented. Keep viewport, mesh sculpting, and B-rep algorithms as separate services that share project, unit, history, and export workflows. See [TOOL_INVENTORY.md](TOOL_INVENTORY.md) for the full planned command catalog and OCCT/custom responsibility split.
 
 ## 3. Suggested repository layout
 
@@ -106,7 +108,7 @@ Undo/redo should operate at the application command/document transaction layer. 
 ## 8. Risks and open questions
 
 1. **Windows dependency integration:** eframe/egui, OCCT, MSVC runtime, and Rust target compatibility must be proven in clean builds and packaging.
-2. **UI and viewport scale:** the current egui preview is a simple projected box. A future tessellated, selectable OCCT viewport may require a dedicated rendering adapter; keep this separate from document and kernel ownership.
+2. **UI and viewport scale:** the current egui viewport is a lightweight triangle painter with OCCT tessellation after regeneration. Large assemblies, GPU sculpt brushes, picking, and multi-viewport workflows may require a dedicated renderer; keep rendering separate from document and kernel ownership.
 3. **OCCT licensing and distribution:** review the selected release's license, third-party notices, and obligations with the product's distribution model before shipping.
 4. **Parametric stability:** topology references can become unstable after edits. Use semantic feature references where possible and design recovery behavior for failed downstream features.
 5. **Manufacturing trust:** kernel validity does not prove castability or printability. Manufacturing checks need documented domain rules and independent regression fixtures.
