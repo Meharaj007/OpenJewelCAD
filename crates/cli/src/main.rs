@@ -31,6 +31,8 @@ enum PrimitiveKind {
     LineSurface,
     OpenPolylineCurve,
     OpenPolylineSurface,
+    BezierCurve,
+    BezierSurface,
     RevolvedSurface,
     PolylineCurve,
     ArcCurve,
@@ -63,6 +65,8 @@ impl PrimitiveKind {
             Self::LineSurface => "line-surface",
             Self::OpenPolylineCurve => "open-polyline-curve",
             Self::OpenPolylineSurface => "open-polyline-surface",
+            Self::BezierCurve => "bezier-curve",
+            Self::BezierSurface => "bezier-surface",
             Self::RevolvedSurface => "revolved-surface",
             Self::PolylineCurve => "polyline-curve",
             Self::ArcCurve => "arc-curve",
@@ -95,6 +99,8 @@ impl PrimitiveKind {
             "line-surface" => Some(Self::LineSurface),
             "open-polyline-curve" => Some(Self::OpenPolylineCurve),
             "open-polyline-surface" => Some(Self::OpenPolylineSurface),
+            "bezier-curve" => Some(Self::BezierCurve),
+            "bezier-surface" => Some(Self::BezierSurface),
             "revolved-surface" => Some(Self::RevolvedSurface),
             "polyline-curve" => Some(Self::PolylineCurve),
             "arc-curve" => Some(Self::ArcCurve),
@@ -128,6 +134,8 @@ impl PrimitiveKind {
             Self::LineSurface => "Line surface",
             Self::OpenPolylineCurve => "Open polyline curve",
             Self::OpenPolylineSurface => "Open polyline surface",
+            Self::BezierCurve => "Cubic Bezier curve",
+            Self::BezierSurface => "Bezier surface",
             Self::RevolvedSurface => "Revolved surface",
             Self::PolylineCurve => "Closed polyline curve",
             Self::ArcCurve => "Arc curve",
@@ -158,9 +166,10 @@ impl PrimitiveKind {
             Self::RoundBrilliant => &["diameter_mm", "height_mm", "table_diameter_mm"],
             Self::LineCurve
             | Self::OpenPolylineCurve
+            | Self::BezierCurve
             | Self::PolylineCurve
             | Self::PlanarSurface => &[],
-            Self::LineSurface | Self::OpenPolylineSurface => &["height_mm"],
+            Self::LineSurface | Self::OpenPolylineSurface | Self::BezierSurface => &["height_mm"],
             Self::RevolvedSurface => &[],
             Self::ArcCurve => &["radius_mm"],
             Self::ArcSurface => &["radius_mm", "height_mm"],
@@ -187,9 +196,12 @@ impl PrimitiveKind {
             Self::RoundBrilliant => &["Girdle diameter", "Total height", "Table diameter"],
             Self::LineCurve
             | Self::OpenPolylineCurve
+            | Self::BezierCurve
             | Self::PolylineCurve
             | Self::PlanarSurface => &[],
-            Self::LineSurface | Self::OpenPolylineSurface => &["Extrusion height"],
+            Self::LineSurface | Self::OpenPolylineSurface | Self::BezierSurface => {
+                &["Extrusion height"]
+            }
             Self::RevolvedSurface => &[],
             Self::ArcCurve => &["Radius"],
             Self::ArcSurface => &["Radius", "Extrusion height"],
@@ -216,9 +228,10 @@ impl PrimitiveKind {
             Self::RoundBrilliant => [6.0, 3.6, 3.3],
             Self::LineCurve
             | Self::OpenPolylineCurve
+            | Self::BezierCurve
             | Self::PolylineCurve
             | Self::PlanarSurface => [0.0, 0.0, 0.0],
-            Self::LineSurface | Self::OpenPolylineSurface => [5.0, 0.0, 0.0],
+            Self::LineSurface | Self::OpenPolylineSurface | Self::BezierSurface => [5.0, 0.0, 0.0],
             Self::RevolvedSurface => [0.0; 3],
             Self::ArcCurve => [5.0, 0.0, 0.0],
             Self::ArcSurface => [5.0, 5.0, 0.0],
@@ -244,8 +257,10 @@ impl PrimitiveKind {
             Self::PolylineCurve
                 | Self::LineCurve
                 | Self::OpenPolylineCurve
+                | Self::BezierCurve
                 | Self::LineSurface
                 | Self::OpenPolylineSurface
+                | Self::BezierSurface
                 | Self::RevolvedSurface
                 | Self::ArcCurve
                 | Self::ArcSurface
@@ -262,6 +277,7 @@ impl PrimitiveKind {
             self,
             Self::LineCurve
                 | Self::OpenPolylineCurve
+                | Self::BezierCurve
                 | Self::PolylineCurve
                 | Self::ArcCurve
                 | Self::CircleCurve
@@ -277,6 +293,7 @@ impl PrimitiveKind {
                 | Self::PlanarEllipseSurface
                 | Self::LineSurface
                 | Self::OpenPolylineSurface
+                | Self::BezierSurface
                 | Self::ArcSurface
                 | Self::RevolvedSurface
         )
@@ -295,6 +312,7 @@ impl PrimitiveKind {
             self,
             Self::LineSurface
                 | Self::OpenPolylineSurface
+                | Self::BezierSurface
                 | Self::ArcSurface
                 | Self::ExtrudedPolygon
                 | Self::ExtrudedCircle
@@ -305,6 +323,7 @@ impl PrimitiveKind {
     fn vector_extrusion_project_version(self) -> Option<u32> {
         match self {
             Self::LineSurface | Self::OpenPolylineSurface | Self::ArcSurface => Some(17),
+            Self::BezierSurface => Some(19),
             Self::ExtrudedPolygon | Self::ExtrudedCircle | Self::ExtrudedEllipse => Some(18),
             _ => None,
         }
@@ -313,7 +332,11 @@ impl PrimitiveKind {
     fn uses_open_polyline(self) -> bool {
         matches!(
             self,
-            Self::OpenPolylineCurve | Self::OpenPolylineSurface | Self::RevolvedSurface
+            Self::OpenPolylineCurve
+                | Self::OpenPolylineSurface
+                | Self::BezierCurve
+                | Self::BezierSurface
+                | Self::RevolvedSurface
         )
     }
 
@@ -374,6 +397,11 @@ struct OpenPolylineFeature {
 }
 
 impl OpenPolylineFeature {
+    fn bezier_default() -> Self {
+        Self::from_points(&[[-5.0, 0.0], [-2.0, 6.0], [2.0, -6.0], [5.0, 0.0]])
+            .expect("the default cubic Bezier control points are valid")
+    }
+
     fn revolved_surface_default() -> Self {
         Self::from_points(&[[5.0, -2.0], [5.0, 2.0]])
             .expect("the default revolved profile is valid")
@@ -994,6 +1022,11 @@ impl PrimitiveModel {
             line: kind.uses_line().then(LineFeature::default),
             open_polyline: if kind == PrimitiveKind::RevolvedSurface {
                 Some(OpenPolylineFeature::revolved_surface_default())
+            } else if matches!(
+                kind,
+                PrimitiveKind::BezierCurve | PrimitiveKind::BezierSurface
+            ) {
+                Some(OpenPolylineFeature::bezier_default())
             } else {
                 kind.uses_open_polyline().then(OpenPolylineFeature::default)
             },
@@ -1073,6 +1106,13 @@ impl PrimitiveModel {
     ) -> Result<Self, Box<dyn Error>> {
         if self.kind.uses_open_polyline() {
             let feature = open_polyline.unwrap_or_default();
+            if matches!(
+                self.kind,
+                PrimitiveKind::BezierCurve | PrimitiveKind::BezierSurface
+            ) && feature.point_count != 4
+            {
+                return Err("a cubic Bezier feature requires exactly four control points".into());
+            }
             self.open_polyline = Some(OpenPolylineFeature::from_points(feature.points())?);
         } else if open_polyline.is_some() {
             return Err(
@@ -1106,7 +1146,7 @@ impl PrimitiveModel {
 
     fn serialize(self) -> String {
         let mut content = format!(
-            "OPENJEWELCAD_PROJECT=18\nfeature_type={}\n",
+            "OPENJEWELCAD_PROJECT=19\nfeature_type={}\n",
             self.kind.name()
         );
         for (index, name) in self.kind.parameter_names().iter().enumerate() {
@@ -1244,7 +1284,7 @@ impl PrimitiveModel {
             .ok_or("unsupported or missing project version")?
             .parse::<u32>()
             .map_err(|_| "invalid project version")?;
-        if !(1..=18).contains(&version) {
+        if !(1..=19).contains(&version) {
             return Err("unsupported or missing project version".into());
         }
         let kind_name = fields
@@ -1305,6 +1345,13 @@ impl PrimitiveModel {
         if kind == PrimitiveKind::RevolvedSurface && version < 15 {
             return Err("revolved surface projects require version 15 or newer".into());
         }
+        if matches!(
+            kind,
+            PrimitiveKind::BezierCurve | PrimitiveKind::BezierSurface
+        ) && version < 19
+        {
+            return Err("Bezier projects require version 19 or newer".into());
+        }
         let mut values = [0.0; 3];
         for (index, name) in kind.parameter_names().iter().enumerate() {
             let value = fields
@@ -1359,6 +1406,13 @@ impl PrimitiveModel {
                 return Err(
                     format!("open_polyline_point_count must be 2..={MAX_PROFILE_POINTS}").into(),
                 );
+            }
+            if matches!(
+                kind,
+                PrimitiveKind::BezierCurve | PrimitiveKind::BezierSurface
+            ) && count != 4
+            {
+                return Err("Bezier projects must contain exactly four control points".into());
             }
             let mut points = Vec::with_capacity(count);
             for index in 0..count {
@@ -1678,6 +1732,18 @@ fn create_primitive_shape(
                 extrusion_direction,
             )
         }
+        PrimitiveKind::BezierCurve => {
+            let bezier = open_polyline.unwrap_or_else(OpenPolylineFeature::bezier_default);
+            kernel.bezier_curve_mm(bezier.points())
+        }
+        PrimitiveKind::BezierSurface => {
+            let bezier = open_polyline.unwrap_or_else(OpenPolylineFeature::bezier_default);
+            kernel.extruded_bezier_surface_vector_mm(
+                bezier.points(),
+                values[0],
+                extrusion_direction,
+            )
+        }
         PrimitiveKind::RevolvedSurface => {
             let open_polyline = open_polyline.unwrap_or_default();
             kernel.revolved_open_polyline_surface_mm(open_polyline.points())
@@ -1902,6 +1968,63 @@ fn create_or_edit_open_polyline(action: &str, file: &str) -> Result<(), Box<dyn 
         );
     }
     save_model(path, model)?;
+    inspect(path)
+}
+
+fn create_or_edit_bezier(
+    kind: PrimitiveKind,
+    action: &str,
+    file: &str,
+    height_mm: f64,
+) -> Result<(), Box<dyn Error>> {
+    let path = Path::new(file);
+    let existing = if action == "edit" {
+        let existing = load_model(path)?;
+        if existing.kind != kind {
+            return Err(format!(
+                "{} edit can only update a matching Bezier project",
+                kind.name()
+            )
+            .into());
+        }
+        Some(existing)
+    } else {
+        None
+    };
+    let values = if kind == PrimitiveKind::BezierSurface {
+        [height_mm, 0.0, 0.0]
+    } else {
+        [0.0; 3]
+    };
+    let mut model = PrimitiveModel::new(kind, values)?;
+    if let Some(existing) = existing {
+        model.transform = existing.transform;
+        model.open_polyline = existing.open_polyline;
+        model.extrusion_direction = existing.extrusion_direction;
+    }
+    let kernel = Kernel::from_environment()?;
+    if !model.create_shape(&kernel)?.is_valid()? {
+        return Err("Bezier feature produced invalid geometry; project was not changed".into());
+    }
+    save_model(path, model)?;
+    inspect(path)
+}
+
+fn convert_bezier_surface(file: &str, height_mm: f64) -> Result<(), Box<dyn Error>> {
+    let path = Path::new(file);
+    let source = load_model(path)?;
+    if source.kind != PrimitiveKind::BezierCurve {
+        return Err("choose a cubic Bezier curve before creating its surface".into());
+    }
+    let mut surface = PrimitiveModel::new(PrimitiveKind::BezierSurface, [height_mm, 0.0, 0.0])?;
+    surface.open_polyline = source.open_polyline;
+    surface.transform = source.transform;
+    surface.extrusion_direction = source.extrusion_direction;
+    let kernel = Kernel::from_environment()?;
+    if !surface.create_shape(&kernel)?.is_valid()? {
+        return Err("Bezier extrusion produced invalid geometry; project was not changed".into());
+    }
+    save_model(path, surface)?;
     inspect(path)
 }
 
@@ -2486,6 +2609,21 @@ fn run() -> Result<(), Box<dyn Error>> {
             convert_open_curve_surface(file, PrimitiveKind::OpenPolylineSurface, height.parse()?)
         }
         [command, action, file]
+            if command == "bezier-curve" && matches!(action.as_str(), "new" | "edit") =>
+        {
+            create_or_edit_bezier(PrimitiveKind::BezierCurve, action, file, 0.0)
+        }
+        [command, action, file, height]
+            if command == "bezier-surface" && matches!(action.as_str(), "new" | "edit") =>
+        {
+            create_or_edit_bezier(PrimitiveKind::BezierSurface, action, file, height.parse()?)
+        }
+        [command, action, file, height]
+            if command == "bezier-surface" && action == "from-curve" =>
+        {
+            convert_bezier_surface(file, height.parse()?)
+        }
+        [command, action, file]
             if command == "revolved-surface" && matches!(action.as_str(), "new" | "edit") =>
         {
             create_or_edit(PrimitiveKind::RevolvedSurface, action, file, [0.0; 3])
@@ -2755,7 +2893,7 @@ fn print_help() {
         "\nEllipse profile commands:\n  openjewelcad ellipse-curve new <file> <radius_x_mm> <radius_y_mm>\n  openjewelcad planar-ellipse new <file> <radius_x_mm> <radius_y_mm>\n  openjewelcad planar-ellipse from-curve <file>\n  openjewelcad extruded-ellipse new <file> <radius_x_mm> <radius_y_mm> <height_mm>\n  openjewelcad extruded-ellipse from-profile <file> <height_mm>"
     );
     println!(
-        "\nOpen curve commands:\n  openjewelcad line-curve new <file> <start_x_mm> <start_y_mm> <end_x_mm> <end_y_mm>\n  openjewelcad line-surface new <file> <height_mm>\n  openjewelcad line-surface from-curve <file> <height_mm>\n  openjewelcad open-polyline-curve new <file>\n  openjewelcad open-polyline-surface new <file> <height_mm>\n  openjewelcad open-polyline-surface from-curve <file> <height_mm>\n  openjewelcad revolved-surface new <file>\n  openjewelcad revolved-surface from-curve <file>\n  openjewelcad arc-curve new <file> <radius_mm> <start_angle_deg> <sweep_angle_deg>\n  openjewelcad arc-surface new <file> <radius_mm> <start_angle_deg> <sweep_angle_deg> <height_mm>\n  openjewelcad arc-surface from-curve <file> <height_mm>\n  openjewelcad open-curve-point <file> <index> <x_mm> <y_mm>\n  openjewelcad open-curve-add <file>\n  openjewelcad open-curve-remove <file> <index>\n  openjewelcad curve-reverse <file>  (line, open polyline, or closed polyline)\n  openjewelcad curve-close <file>  (open polyline curve)\n  Arc start is measured counter-clockwise from +X; sweep must be between 0° and 360°."
+        "\nOpen curve commands:\n  openjewelcad line-curve new <file> <start_x_mm> <start_y_mm> <end_x_mm> <end_y_mm>\n  openjewelcad line-surface new <file> <height_mm>\n  openjewelcad line-surface from-curve <file> <height_mm>\n  openjewelcad open-polyline-curve new <file>\n  openjewelcad open-polyline-surface new <file> <height_mm>\n  openjewelcad open-polyline-surface from-curve <file> <height_mm>\n  openjewelcad bezier-curve new|edit <file>\n  openjewelcad bezier-surface new|edit <file> <height_mm>\n  openjewelcad bezier-surface from-curve <file> <height_mm>\n  openjewelcad revolved-surface new <file>\n  openjewelcad revolved-surface from-curve <file>\n  openjewelcad arc-curve new <file> <radius_mm> <start_angle_deg> <sweep_angle_deg>\n  openjewelcad arc-surface new <file> <radius_mm> <start_angle_deg> <sweep_angle_deg> <height_mm>\n  openjewelcad arc-surface from-curve <file> <height_mm>\n  openjewelcad open-curve-point <file> <index> <x_mm> <y_mm>\n  openjewelcad open-curve-add <file>\n  openjewelcad open-curve-remove <file> <index>\n  openjewelcad curve-reverse <file>  (line, open polyline, or closed polyline)\n  openjewelcad curve-close <file>  (open polyline curve)\n  A cubic Bezier has four editable control points; points 1 and 4 are endpoints.\n  Arc start is measured counter-clockwise from +X; sweep must be between 0° and 360°."
     );
     println!("\nTransform commands:\n  openjewelcad mirror <file> <YZ|XZ|XY> <on|off>\n  openjewelcad extrusion-direction <file> <direction_x> <direction_y> <direction_z> (surface-direction alias)");
 }
@@ -2811,8 +2949,17 @@ fn inspect(path: &Path) -> Result<(), Box<dyn Error>> {
     if let Some(open_polyline) = model.open_polyline {
         for (index, point) in open_polyline.points().iter().enumerate() {
             println!(
-                "Open curve point {index}: {:.3}, {:.3} mm",
-                point[0], point[1]
+                "{} {index}: {:.3}, {:.3} mm",
+                if matches!(
+                    model.kind,
+                    PrimitiveKind::BezierCurve | PrimitiveKind::BezierSurface
+                ) {
+                    "Bezier control point"
+                } else {
+                    "Open curve point"
+                },
+                point[0],
+                point[1]
             );
         }
     }
@@ -3037,7 +3184,7 @@ mod tests {
         assert!(PrimitiveModel::new(PrimitiveKind::TruncatedCone, [2.0, 2.0, 5.0]).is_err());
         assert!(PrimitiveModel::new(PrimitiveKind::Pipe, [2.0, 2.0, 5.0]).is_err());
         assert!(PrimitiveModel::new(PrimitiveKind::RoundBrilliant, [6.0, 3.6, 6.0]).is_err());
-        assert!(PrimitiveModel::parse("OPENJEWELCAD_PROJECT=18\n").is_err());
+        assert!(PrimitiveModel::parse("OPENJEWELCAD_PROJECT=20\n").is_err());
         assert!(PrimitiveModel::parse(
             "OPENJEWELCAD_PROJECT=1\nfeature_type=sphere\nradius_mm=2\nextra=1\n"
         )
@@ -3067,7 +3214,7 @@ mod tests {
     }
 
     #[test]
-    fn boolean_features_round_trip_in_project_version_eighteen() {
+    fn boolean_features_round_trip_in_current_project_version_nineteen() {
         let tool_transform = TransformParams {
             translation_mm: [5.0, 5.0, 1.0],
             rotation_deg: [0.0, 0.0, 15.0],
@@ -3085,10 +3232,10 @@ mod tests {
             .unwrap()
             .with_boolean(Some(boolean));
         let serialized = model.serialize();
-        assert!(serialized.starts_with("OPENJEWELCAD_PROJECT=18\n"));
+        assert!(serialized.starts_with("OPENJEWELCAD_PROJECT=19\n"));
         assert_eq!(PrimitiveModel::parse(&serialized).unwrap(), model);
         let legacy = serialized
-            .replacen("OPENJEWELCAD_PROJECT=18", "OPENJEWELCAD_PROJECT=3", 1)
+            .replacen("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=3", 1)
             .replace("tool_mirror_x=true\n", "tool_mirror_x=false\n");
         let legacy_model = PrimitiveModel::parse(&legacy).unwrap();
         assert_eq!(
@@ -3107,7 +3254,7 @@ mod tests {
         let legacy =
             model
                 .serialize()
-                .replacen("OPENJEWELCAD_PROJECT=18", "OPENJEWELCAD_PROJECT=3", 1);
+                .replacen("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=3", 1);
         let loaded = PrimitiveModel::parse(&legacy).unwrap();
         assert_eq!(loaded.kind, model.kind);
         assert_eq!(loaded.values(), model.values());
@@ -3115,7 +3262,17 @@ mod tests {
     }
 
     #[test]
-    fn linear_and_polar_patterns_round_trip_in_project_version_eighteen() {
+    fn version_eighteen_projects_remain_readable_after_bezier_upgrade() {
+        let model = PrimitiveModel::new(PrimitiveKind::Box, [2.0, 3.0, 4.0]).unwrap();
+        let legacy =
+            model
+                .serialize()
+                .replacen("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=18", 1);
+        assert_eq!(PrimitiveModel::parse(&legacy).unwrap(), model);
+    }
+
+    #[test]
+    fn linear_and_polar_patterns_round_trip_in_current_project_version_nineteen() {
         let base = PrimitiveModel::new(PrimitiveKind::RoundBrilliant, [6.0, 3.6, 3.3]).unwrap();
         for pattern in [
             PatternFeature::linear(5, [0.0, 8.0, 0.0]).unwrap(),
@@ -3123,10 +3280,10 @@ mod tests {
         ] {
             let model = base.with_pattern(Some(pattern));
             let saved = model.serialize();
-            assert!(saved.starts_with("OPENJEWELCAD_PROJECT=18\n"));
+            assert!(saved.starts_with("OPENJEWELCAD_PROJECT=19\n"));
             assert_eq!(PrimitiveModel::parse(&saved).unwrap(), model);
             let version_five =
-                saved.replacen("OPENJEWELCAD_PROJECT=18", "OPENJEWELCAD_PROJECT=5", 1);
+                saved.replacen("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=5", 1);
             assert_eq!(PrimitiveModel::parse(&version_five).unwrap(), model);
         }
         assert!(PatternFeature::linear(1, [1.0, 0.0, 0.0]).is_err());
@@ -3152,7 +3309,7 @@ mod tests {
         let serialized = model.serialize();
         assert_eq!(PrimitiveModel::parse(&serialized).unwrap(), model);
         let version_five =
-            serialized.replacen("OPENJEWELCAD_PROJECT=18", "OPENJEWELCAD_PROJECT=5", 1);
+            serialized.replacen("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=5", 1);
         assert_eq!(PrimitiveModel::parse(&version_five).unwrap(), model);
         assert!(
             PolygonProfile::from_points(&[[0.0, 0.0], [2.0, 2.0], [0.0, 2.0], [2.0, 0.0],])
@@ -3196,12 +3353,12 @@ mod tests {
         let version_five =
             curve
                 .serialize()
-                .replacen("OPENJEWELCAD_PROJECT=18", "OPENJEWELCAD_PROJECT=5", 1);
+                .replacen("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=5", 1);
         assert!(PrimitiveModel::parse(&version_five).is_err());
         let version_six =
             curve
                 .serialize()
-                .replacen("OPENJEWELCAD_PROJECT=18", "OPENJEWELCAD_PROJECT=6", 1);
+                .replacen("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=6", 1);
         assert_eq!(PrimitiveModel::parse(&version_six).unwrap(), curve);
         let curve_shape = curve.create_shape(&kernel).unwrap();
         assert!(curve_shape.is_valid().unwrap());
@@ -3264,12 +3421,12 @@ mod tests {
         let version_seven =
             curve
                 .serialize()
-                .replacen("OPENJEWELCAD_PROJECT=18", "OPENJEWELCAD_PROJECT=7", 1);
+                .replacen("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=7", 1);
         assert_eq!(PrimitiveModel::parse(&version_seven).unwrap(), curve);
         let version_six =
             curve
                 .serialize()
-                .replacen("OPENJEWELCAD_PROJECT=18", "OPENJEWELCAD_PROJECT=6", 1);
+                .replacen("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=6", 1);
         assert!(PrimitiveModel::parse(&version_six).is_err());
     }
 
@@ -3312,7 +3469,7 @@ mod tests {
         let version_seven =
             curve
                 .serialize()
-                .replacen("OPENJEWELCAD_PROJECT=18", "OPENJEWELCAD_PROJECT=7", 1);
+                .replacen("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=7", 1);
         assert!(PrimitiveModel::parse(&version_seven).is_err());
     }
 
@@ -3325,13 +3482,13 @@ mod tests {
             .with_arc(Some(arc_feature))
             .unwrap();
         let serialized = model.serialize();
-        assert!(serialized.starts_with("OPENJEWELCAD_PROJECT=18\n"));
+        assert!(serialized.starts_with("OPENJEWELCAD_PROJECT=19\n"));
         assert_eq!(PrimitiveModel::parse(&serialized).unwrap(), model);
         let version_nine =
-            serialized.replacen("OPENJEWELCAD_PROJECT=18", "OPENJEWELCAD_PROJECT=9", 1);
+            serialized.replacen("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=9", 1);
         assert_eq!(PrimitiveModel::parse(&version_nine).unwrap(), model);
         let version_eight =
-            serialized.replacen("OPENJEWELCAD_PROJECT=18", "OPENJEWELCAD_PROJECT=8", 1);
+            serialized.replacen("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=8", 1);
         assert!(PrimitiveModel::parse(&version_eight).is_err());
         assert!(ArcFeature::new(0.0, 0.0).is_err());
         assert!(ArcFeature::new(0.0, 360.0).is_err());
@@ -3354,13 +3511,13 @@ mod tests {
             .with_line(Some(line_feature))
             .unwrap();
         let serialized = model.serialize();
-        assert!(serialized.starts_with("OPENJEWELCAD_PROJECT=18\n"));
+        assert!(serialized.starts_with("OPENJEWELCAD_PROJECT=19\n"));
         assert_eq!(PrimitiveModel::parse(&serialized).unwrap(), model);
         let version_nine =
-            serialized.replacen("OPENJEWELCAD_PROJECT=18", "OPENJEWELCAD_PROJECT=9", 1);
+            serialized.replacen("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=9", 1);
         assert!(PrimitiveModel::parse(&version_nine).is_err());
         let version_ten =
-            serialized.replacen("OPENJEWELCAD_PROJECT=18", "OPENJEWELCAD_PROJECT=10", 1);
+            serialized.replacen("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=10", 1);
         assert_eq!(PrimitiveModel::parse(&version_ten).unwrap(), model);
         assert!(LineFeature::new([1.0, 1.0], [1.0, 1.0]).is_err());
 
@@ -3394,13 +3551,13 @@ mod tests {
             .with_open_polyline(Some(changed))
             .unwrap();
         let serialized = model.serialize();
-        assert!(serialized.starts_with("OPENJEWELCAD_PROJECT=18\n"));
+        assert!(serialized.starts_with("OPENJEWELCAD_PROJECT=19\n"));
         assert_eq!(PrimitiveModel::parse(&serialized).unwrap(), model);
         let version_eleven =
-            serialized.replacen("OPENJEWELCAD_PROJECT=18", "OPENJEWELCAD_PROJECT=11", 1);
+            serialized.replacen("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=11", 1);
         assert_eq!(PrimitiveModel::parse(&version_eleven).unwrap(), model);
         let version_ten =
-            serialized.replacen("OPENJEWELCAD_PROJECT=18", "OPENJEWELCAD_PROJECT=10", 1);
+            serialized.replacen("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=10", 1);
         assert!(PrimitiveModel::parse(&version_ten).is_err());
 
         let shape = model.create_shape(&kernel).unwrap();
@@ -3502,13 +3659,13 @@ mod tests {
             .with_profile(profile)
             .unwrap();
         let serialized = model.serialize();
-        assert!(serialized.starts_with("OPENJEWELCAD_PROJECT=18\n"));
+        assert!(serialized.starts_with("OPENJEWELCAD_PROJECT=19\n"));
         assert_eq!(PrimitiveModel::parse(&serialized).unwrap(), model);
         let version_twelve =
-            serialized.replacen("OPENJEWELCAD_PROJECT=18", "OPENJEWELCAD_PROJECT=12", 1);
+            serialized.replacen("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=12", 1);
         assert_eq!(PrimitiveModel::parse(&version_twelve).unwrap(), model);
         let version_eleven =
-            serialized.replacen("OPENJEWELCAD_PROJECT=18", "OPENJEWELCAD_PROJECT=11", 1);
+            serialized.replacen("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=11", 1);
         assert!(PrimitiveModel::parse(&version_eleven).is_err());
 
         let shape = model.create_shape(&kernel).unwrap();
@@ -3545,13 +3702,13 @@ mod tests {
             (polyline_surface, 40.0 * std::f64::consts::SQRT_2),
         ] {
             let serialized = model.serialize();
-            assert!(serialized.starts_with("OPENJEWELCAD_PROJECT=18\n"));
+            assert!(serialized.starts_with("OPENJEWELCAD_PROJECT=19\n"));
             assert_eq!(PrimitiveModel::parse(&serialized).unwrap(), model);
             let version_thirteen =
-                serialized.replacen("OPENJEWELCAD_PROJECT=18", "OPENJEWELCAD_PROJECT=13", 1);
+                serialized.replacen("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=13", 1);
             assert_eq!(PrimitiveModel::parse(&version_thirteen).unwrap(), model);
             let version_twelve =
-                serialized.replacen("OPENJEWELCAD_PROJECT=18", "OPENJEWELCAD_PROJECT=12", 1);
+                serialized.replacen("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=12", 1);
             assert!(PrimitiveModel::parse(&version_twelve).is_err());
             let shape = model.create_shape(&kernel).unwrap();
             assert!(shape.is_valid().unwrap());
@@ -3573,7 +3730,7 @@ mod tests {
             .with_line(Some(line))
             .unwrap()
             .serialize()
-            .replace("OPENJEWELCAD_PROJECT=18", "OPENJEWELCAD_PROJECT=16")
+            .replace("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=16")
             .lines()
             .filter(|line| !line.starts_with("extrusion_direction_"))
             .collect::<Vec<_>>()
@@ -3585,7 +3742,7 @@ mod tests {
             [0.0, 0.0, 1.0]
         );
         let downgraded_custom =
-            serialized.replacen("OPENJEWELCAD_PROJECT=18", "OPENJEWELCAD_PROJECT=16", 1);
+            serialized.replacen("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=16", 1);
         assert!(PrimitiveModel::parse(&downgraded_custom).is_err());
         let shape = directed.create_shape(&kernel).unwrap();
         assert!(shape.is_valid().unwrap());
@@ -3635,7 +3792,7 @@ mod tests {
             ),
         ] {
             let serialized = model.serialize();
-            assert!(serialized.starts_with("OPENJEWELCAD_PROJECT=18\n"));
+            assert!(serialized.starts_with("OPENJEWELCAD_PROJECT=19\n"));
             assert_eq!(PrimitiveModel::parse(&serialized).unwrap(), model);
             let shape = model.create_shape(&kernel).unwrap();
             assert!(shape.is_valid().unwrap());
@@ -3648,7 +3805,7 @@ mod tests {
         let legacy_circle = PrimitiveModel::new(PrimitiveKind::ExtrudedCircle, [2.0, 5.0, 0.0])
             .unwrap()
             .serialize()
-            .replace("OPENJEWELCAD_PROJECT=18", "OPENJEWELCAD_PROJECT=17")
+            .replace("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=17")
             .lines()
             .filter(|line| !line.starts_with("extrusion_direction_"))
             .collect::<Vec<_>>()
@@ -3663,7 +3820,7 @@ mod tests {
                 .with_extrusion_direction(direction)
                 .unwrap()
                 .serialize()
-                .replace("OPENJEWELCAD_PROJECT=18", "OPENJEWELCAD_PROJECT=17");
+                .replace("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=17");
         assert!(PrimitiveModel::parse(&custom_from_old_version).is_err());
         assert!(
             PrimitiveModel::new(PrimitiveKind::ExtrudedCircle, [2.0, 5.0, 0.0])
@@ -3687,13 +3844,13 @@ mod tests {
             .with_arc(Some(ArcFeature::new(0.0, 90.0).unwrap()))
             .unwrap();
         let serialized = model.serialize();
-        assert!(serialized.starts_with("OPENJEWELCAD_PROJECT=18\n"));
+        assert!(serialized.starts_with("OPENJEWELCAD_PROJECT=19\n"));
         assert_eq!(PrimitiveModel::parse(&serialized).unwrap(), model);
         let version_fourteen =
-            serialized.replacen("OPENJEWELCAD_PROJECT=18", "OPENJEWELCAD_PROJECT=14", 1);
+            serialized.replacen("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=14", 1);
         assert_eq!(PrimitiveModel::parse(&version_fourteen).unwrap(), model);
         let version_thirteen =
-            serialized.replacen("OPENJEWELCAD_PROJECT=18", "OPENJEWELCAD_PROJECT=13", 1);
+            serialized.replacen("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=13", 1);
         assert!(PrimitiveModel::parse(&version_thirteen).is_err());
 
         let shape = model.create_shape(&kernel).unwrap();
@@ -3719,10 +3876,10 @@ mod tests {
             &[[5.0, -2.0], [5.0, 2.0]]
         );
         let serialized = model.serialize();
-        assert!(serialized.starts_with("OPENJEWELCAD_PROJECT=18\n"));
+        assert!(serialized.starts_with("OPENJEWELCAD_PROJECT=19\n"));
         assert_eq!(PrimitiveModel::parse(&serialized).unwrap(), model);
         let version_fourteen =
-            serialized.replacen("OPENJEWELCAD_PROJECT=18", "OPENJEWELCAD_PROJECT=14", 1);
+            serialized.replacen("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=14", 1);
         assert!(PrimitiveModel::parse(&version_fourteen).is_err());
 
         let shape = model.create_shape(&kernel).unwrap();
@@ -3781,6 +3938,46 @@ mod tests {
         for (actual, expected) in bounds.into_iter().zip([0.0, 0.0, 0.0, 10.0, 2.0, 2.0]) {
             assert!((actual - expected).abs() < 1e-7);
         }
+    }
+
+    #[test]
+    fn bezier_curve_extrudes_to_surface_and_round_trips_in_version_nineteen() {
+        let controls =
+            OpenPolylineFeature::from_points(&[[-5.0, 0.0], [-2.0, 6.0], [2.0, -6.0], [5.0, 0.0]])
+                .unwrap();
+        let curve = PrimitiveModel::new(PrimitiveKind::BezierCurve, [0.0; 3])
+            .unwrap()
+            .with_open_polyline(Some(controls))
+            .unwrap();
+        let serialized = curve.serialize();
+        assert!(serialized.starts_with("OPENJEWELCAD_PROJECT=19\n"));
+        assert_eq!(PrimitiveModel::parse(&serialized).unwrap(), curve);
+        let legacy = serialized.replacen("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=18", 1);
+        assert!(PrimitiveModel::parse(&legacy).is_err());
+        assert!(curve
+            .with_open_polyline(Some(OpenPolylineFeature::default()))
+            .is_err());
+
+        let surface = PrimitiveModel::new(PrimitiveKind::BezierSurface, [5.0, 0.0, 0.0])
+            .unwrap()
+            .with_open_polyline(Some(controls))
+            .unwrap()
+            .with_extrusion_direction([0.0, 0.0, 1.0])
+            .unwrap();
+        assert_eq!(
+            PrimitiveModel::parse(&surface.serialize()).unwrap(),
+            surface
+        );
+        let kernel = Kernel::from_environment().unwrap();
+        let curve_shape = curve.create_shape(&kernel).unwrap();
+        let surface_shape = surface.create_shape(&kernel).unwrap();
+        assert!(curve_shape.is_valid().unwrap());
+        assert!(surface_shape.is_valid().unwrap());
+        let expected_area = curve_shape.length_mm().unwrap() * 5.0;
+        assert!(
+            (surface_shape.mass_properties().unwrap()[1] - expected_area).abs()
+                < expected_area * 1e-2
+        );
     }
 
     #[test]
@@ -3848,7 +4045,7 @@ mod tests {
         let legacy = PrimitiveModel::new(PrimitiveKind::Box, [2.0, 3.0, 4.0])
             .unwrap()
             .serialize()
-            .replace("OPENJEWELCAD_PROJECT=18", "OPENJEWELCAD_PROJECT=15")
+            .replace("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=15")
             .replace("mirror_x=false\n", "")
             .replace("mirror_y=false\n", "")
             .replace("mirror_z=false\n", "");
@@ -3861,7 +4058,7 @@ mod tests {
         );
         let legacy_with_mirror = mirrored
             .serialize()
-            .replace("OPENJEWELCAD_PROJECT=18", "OPENJEWELCAD_PROJECT=15");
+            .replace("OPENJEWELCAD_PROJECT=19", "OPENJEWELCAD_PROJECT=15");
         assert!(PrimitiveModel::parse(&legacy_with_mirror).is_err());
         assert!(mirror_project(&path.to_string_lossy(), "yz", "sideways").is_err());
         let _ = fs::remove_file(path);

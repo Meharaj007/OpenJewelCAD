@@ -246,6 +246,42 @@ int main() {
     std::cout << "Valid arbitrary-direction surface extrusion; area="
               << vector_surface_properties[1] << " mm^2\n";
 
+    const double bezier_control_points[] = {-5.0, 0.0, -2.0, 6.0,
+                                              2.0, -6.0, 5.0, 0.0};
+    OJCAD_Shape* bezier_curve = nullptr;
+    OJCAD_Shape* bezier_surface = nullptr;
+    double bezier_length = 0.0;
+    double bezier_surface_properties[5]{};
+    double bezier_surface_bounds[6]{};
+    int32_t bezier_valid = 0;
+    if (ojcad_bezier_curve_create(bezier_control_points, 4, &bezier_curve, &curve_error) !=
+            OJCAD_STATUS_OK ||
+        ojcad_shape_length_mm(bezier_curve, &bezier_length, &curve_error) != OJCAD_STATUS_OK ||
+        ojcad_extruded_bezier_surface_vector_create(
+            bezier_control_points, 4, 5.0, 0.0, 0.0, 1.0, &bezier_surface, &curve_error) !=
+            OJCAD_STATUS_OK ||
+        ojcad_shape_mass_properties(bezier_surface, bezier_surface_properties, &curve_error) !=
+            OJCAD_STATUS_OK ||
+        ojcad_shape_bounds_mm(bezier_surface, bezier_surface_bounds, &curve_error) !=
+            OJCAD_STATUS_OK ||
+        ojcad_shape_is_valid(bezier_surface, &bezier_valid, &curve_error) != OJCAD_STATUS_OK ||
+        bezier_valid != 1 || bezier_length <= 10.0 || bezier_length >= 20.0 ||
+        std::abs(bezier_surface_properties[1] - bezier_length * 5.0) > bezier_length * 5.0 * 1e-2 ||
+        std::abs(bezier_surface_bounds[5] - 5.0) > 1e-5) {
+        std::cerr << "OCCT Bezier curve-to-surface workflow failed: "
+                  << curve_error.message << "; valid=" << bezier_valid
+                  << ", length=" << bezier_length << ", area=" << bezier_surface_properties[1]
+                  << ", bounds_z=" << bezier_surface_bounds[2] << ".."
+                  << bezier_surface_bounds[5] << '\n';
+        ojcad_shape_destroy(bezier_curve);
+        ojcad_shape_destroy(bezier_surface);
+        return 1;
+    }
+    std::cout << "Valid cubic Bezier curve-to-surface workflow; length=" << bezier_length
+              << " mm; area=" << bezier_surface_properties[1] << " mm^2\n";
+    ojcad_shape_destroy(bezier_curve);
+    ojcad_shape_destroy(bezier_surface);
+
     const double revolved_open_profile[] = {5.0, -2.0, 5.0, 2.0};
     OJCAD_Shape* revolved_surface = nullptr;
     double revolved_surface_properties[5]{};

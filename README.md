@@ -2,7 +2,7 @@
 
 Open Jewel CAD is an early-stage, Windows-first jewellery CAD project. The long-term goal is a professional design and manufacturing application built around accurate geometry, editable parameters, and dependable workflows.
 
-> **Project stage:** the desktop editor now follows curve → surface → solid paths: edit closed profiles, create planar faces, extrude closed profiles along editable 3D directions, extrude open line/polyline/arc curves into surface shells, revolve an open profile into a surface, or revolve a positive-radius section into a solid. It also creates analytic circles and ellipses; eight solid primitives; a parametric ring band; and a faceted round-brilliant stone. It supports transforms and arrays, B-rep union/difference/intersection with a second primitive, OCCT measurements, and binary STL or OBJ export. Broader jewellery builders and brush-based sculpting remain planned.
+> **Project stage:** the desktop editor now follows curve → surface → solid paths: edit closed profiles, create planar faces, extrude closed profiles along editable 3D directions, extrude line/polyline/arc/cubic Bezier curves into surface shells, revolve an open profile into a surface, or revolve a positive-radius section into a solid. It also creates analytic circles and ellipses; eight solid primitives; a parametric ring band; and a faceted round-brilliant stone. It supports transforms and arrays, B-rep union/difference/intersection with a second primitive, OCCT measurements, and binary STL or OBJ export. Broader jewellery builders and brush-based sculpting remain planned.
 
 ## Goals
 
@@ -23,7 +23,7 @@ Current implementation:
 - Validated axis-aligned bounds with dimensions, volume, union, and tolerance-aware containment checks.
 - Typed errors for invalid numeric values, zero-length directions, invalid bounds, and invalid tolerances.
 - A document crate with stable feature IDs, dependency ordering, missing-reference and cycle checks, and revision tracking.
-- A C++ OCCT kernel exposed through ABI version 23: create solid primitives, open lines and polylines, arcs, closed polygons, circles, and ellipses; planar faces, exact open line/polyline/arc and revolved-profile surface shells, closed-profile extrusions along editable 3D directions, and revolved solids; transform, mirror, boolean-combine, and array shapes; and report length, mass properties, bounds, and validity.
+- A C++ OCCT kernel exposed through ABI version 24: create solid primitives, open lines and polylines, cubic Bezier curves, arcs, closed polygons, circles, and ellipses; planar faces, exact open line/polyline/arc/Bezier and revolved-profile surface shells, closed-profile extrusions along editable 3D directions, and revolved solids; transform, mirror, boolean-combine, and array shapes; and report length, mass properties, bounds, and validity.
 - A Rust FFI crate that loads the kernel DLL, checks its ABI version, owns shape handles safely, and converts kernel errors.
 - A Rust desktop app that opens to a project manager with create/open actions, a persisted recent-project list, and a folder browser for `.ojcad` files.
 - A modern dark editor workspace with a left primitive toolbox, fitted and clipped central viewport, isometric/top/front/right views, shaded/edge display modes, right-side dimensions, move/rotate/scale controls, save controls, and OCCT regeneration and validation.
@@ -35,12 +35,13 @@ Current implementation:
 - A ring band generator with editable inner diameter, wall thickness, and band width, built and measured as an exact OCCT hollow solid.
 - A round-brilliant gemstone generator with editable girdle diameter, total height, and table diameter. OCCT builds a closed faceted solid that can be transformed, measured, boolean-combined, and exported.
 - An editable polygon profile with 3–64 vertices, live coordinate editing, self-intersection validation, exact OCCT extrusion along an editable 3D direction, and 360° revolve around the Y axis when all profile points stay at positive radius. The curve editor builds dimensioned rectangles, regular polygons, and ring cross sections; generated points stay editable.
-- Rhino-style workflows: create a closed polyline curve, convert it into a planar surface, then extrude or revolve that same profile into a solid. Open line, polyline, and arc curves can be extruded along any non-zero 3D direction; open polyline profiles can also be revolved around Y to form valid surface shells. Project version 15 introduced revolved surfaces, version 16 stores world-plane mirror settings, version 17 stores open-curve extrusion directions, and version 18 adds directions for closed-profile solids; versions 1 through 17 remain readable.
-- A circle workflow: create a true OCCT circle curve, convert it to a planar disk, and extrude the same saved radius into a cylinder along a chosen 3D direction. Project version 7 introduced these stages; current saves use version 18.
-- An ellipse workflow: create an exact OCCT ellipse, convert it to a planar face, then extrude the saved X/Y radii into a solid along a chosen 3D direction. Project version 8 introduced these stages; current saves use version 18.
+- Rhino-style workflows: create a closed polyline curve, convert it into a planar surface, then extrude or revolve that same profile into a solid. Open line, polyline, arc, and cubic Bezier curves can be extruded along any non-zero 3D direction; open polyline profiles can also be revolved around Y to form valid surface shells. Project version 15 introduced revolved surfaces, version 16 stores world-plane mirror settings, version 17 stores open-curve extrusion directions, version 18 adds directions for closed-profile solids, and version 19 adds editable four-point cubic Bezier curves and their extrusion surfaces; versions 1 through 18 remain readable.
+- A circle workflow: create a true OCCT circle curve, convert it to a planar disk, and extrude the same saved radius into a cylinder along a chosen 3D direction. Project version 7 introduced these stages; current saves use version 19.
+- An ellipse workflow: create an exact OCCT ellipse, convert it to a planar face, then extrude the saved X/Y radii into a solid along a chosen 3D direction. Project version 8 introduced these stages; current saves use version 19.
 - An open arc curve with editable radius, start angle, and counter-clockwise sweep. It is saved as an exact OCCT circular edge; introduced in project version 9.
 - An open line curve with editable XY endpoints, exact OCCT geometry, length validation, and a two-endpoint preview. Project version 10 introduced endpoint persistence.
 - An open polyline with 2–64 ordered editable XY points, exact OCCT wire geometry, measured length, endpoint markers, and project persistence introduced in version 11.
+- A cubic Bezier curve with four editable XY control points, exact OCCT curve geometry, measured length, a smooth viewport preview, and an extrusion path to a directional OCCT surface shell. Current saves use project version 19.
 - Curve editing that reverses line, open-polyline, and closed-polyline direction, and closes an open polyline into a validated closed curve. Both operations are available in the editor and through `curve-reverse` / `curve-close` project commands.
 - Open line, polyline, and arc surface tools create valid OCCT shells with exact area and tessellation. They retain and edit their source curve geometry, extrusion distance, and 3D direction in the UI and project file. A revolved surface retains its positive-radius open profile and produces the full 360° shell around Y.
 - An analysis panel that reports solid validity, volume, surface area, center of mass, and axis-aligned bounds from OCCT, with an optional custom-density metal weight estimate.
@@ -48,7 +49,7 @@ Current implementation:
 - Unit tests for geometry and feature-graph behavior.
 - A CMake/vcpkg smoke test that builds all eight OCCT solids and verifies their volumes and validity.
 
-The current verified phase passes all Rust unit/integration tests and the CMake kernel smoke test. The smoke test checks OCCT line, open and closed polylines, arc, circle, and ellipse curves; planar, open-polyline, and arc extrusion surfaces; solid primitives; round-brilliant, polygon, and revolved geometry; transforms; booleans; arrays; measurements; and tessellation. CLI profile editing, curve creation, stage conversion, save/reopen, inspection, and STL export were also exercised.
+The Bezier phase is verified by the Rust workspace tests, the CMake kernel smoke test, and a headless CLI run that created a cubic curve, edited a control point, converted it to a surface, changed its extrusion direction, and inspected the valid OCCT result. The workspace suite covers the Rust geometry/document layers, kernel FFI, CLI project persistence, and viewport preview math. The smoke test covers OCCT curve/surface creation, solid primitives, transforms, booleans, arrays, measurements, and tessellation.
 
 ## What is next
 
@@ -62,13 +63,13 @@ See the [development roadmap](DEVELOPMENT_ROADMAP.md) for stage gates and the [a
 - **C++ and OCCT:** CAD kernel operations and jewellery geometry.
 - **CMake and Cargo:** native and Rust builds.
 
-The viewport uses a fast curve/profile preview while editing and switches to exact OCCT tessellation after regeneration. Orbit, wheel zoom, middle-button pan, and Fit keep the model easy to frame inside the clipped view. Mesh export uses OCCT tessellation at 0.05 mm linear deflection and 0.35 rad angular deflection. New `.ojcad` saves use version 18 for editable closed-profile extrusion directions; versions 1 through 17 still open.
+The viewport uses a fast curve/profile preview while editing and switches to exact OCCT tessellation after regeneration. Orbit, wheel zoom, middle-button pan, and Fit keep the model easy to frame inside the clipped view. Mesh export uses OCCT tessellation at 0.05 mm linear deflection and 0.35 rad angular deflection. New `.ojcad` saves use version 19 for cubic Bezier curves and surfaces; versions 1 through 18 still open.
 
 ## Build and test (Windows)
 
 Install Visual Studio with **Desktop development with C++**, CMake, Git, and vcpkg. Set `VCPKG_ROOT` to the vcpkg checkout that matches the baseline pinned in `vcpkg.json`. From a Visual Studio Developer PowerShell at the repository root:
 
-After building the OCCT kernel once, double-click [Start-OpenJewelCAD.bat](Start-OpenJewelCAD.bat) to open the desktop editor. The launcher finds the Debug or Release kernel, builds the Rust app if its executable is missing, and sets the kernel DLL search path for startup. A fresh checkout still needs the native kernel prerequisites installed and built first.
+After building the OCCT kernel once, double-click [Start-OpenJewelCAD.bat](Start-OpenJewelCAD.bat) to open the desktop editor. The launcher finds the Debug or Release kernel, refreshes the Rust app when Cargo is installed (or uses an existing app build), and sets the kernel DLL search path for startup. A fresh checkout still needs the native kernel prerequisites installed and built first.
 
 ```powershell
 $env:VCPKG_ROOT = "$HOME\Documents\vcpkg"

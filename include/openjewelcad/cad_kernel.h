@@ -136,6 +136,16 @@ OJCAD_API OJCAD_Status ojcad_open_polyline_curve_create(const double* points_xy_
                                                          uint32_t point_count,
                                                          OJCAD_Shape** out_shape,
                                                          OJCAD_Error* out_error);
+/// Create an open cubic Bezier curve in XY from exactly four control points.
+OJCAD_API OJCAD_Status ojcad_bezier_curve_create(const double* control_points_xy_mm,
+                                                  uint32_t point_count,
+                                                  OJCAD_Shape** out_shape,
+                                                  OJCAD_Error* out_error);
+/// Extrude an open cubic Bezier curve into a surface along a supplied 3D vector.
+OJCAD_API OJCAD_Status ojcad_extruded_bezier_surface_vector_create(
+    const double* control_points_xy_mm, uint32_t point_count, double height_mm,
+    double direction_x, double direction_y, double direction_z,
+    OJCAD_Shape** out_shape, OJCAD_Error* out_error);
 /// Extrude an open XY line or polyline along +Z to create a surface shell.
 OJCAD_API OJCAD_Status ojcad_extruded_open_polyline_surface_create(
     const double* points_xy_mm, uint32_t point_count, double height_mm,

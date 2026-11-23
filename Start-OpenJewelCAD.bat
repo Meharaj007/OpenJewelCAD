@@ -30,15 +30,16 @@ if not exist "%KERNEL_DLL%" (
 )
 
 set "APP_EXE=%APP_ROOT%target\%CARGO_PROFILE%\openjewelcad.exe"
-if not exist "%APP_EXE%" (
-    where cargo >nul 2>nul
-    if errorlevel 1 (
-        echo Rust Cargo was not found. Install Rust, then double-click this file again.
+where cargo >nul 2>nul
+if errorlevel 1 (
+    if not exist "%APP_EXE%" (
+        echo Rust Cargo was not found and the desktop app has not been built.
+        echo Install Rust or build the app using the Windows instructions in README.md.
         pause
         popd
         exit /b 1
     )
-
+) else (
     echo Building the Open Jewel CAD desktop app...
     if /I "%BUILD_CONFIG%"=="Release" (
         cargo build --locked --release -p openjewelcad-cli

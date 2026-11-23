@@ -185,6 +185,8 @@ struct Api {
     revolved_polygon_create: PolygonFeature,
     extruded_open_polyline_surface_create: ExtrudedPolygon,
     extruded_open_polyline_surface_vector_create: ExtrudedPolylineVector,
+    bezier_curve_create: PolygonFeature,
+    extruded_bezier_surface_vector_create: ExtrudedPolylineVector,
     revolved_open_polyline_surface_create: PolygonFeature,
     closed_polyline_create: PolygonFeature,
     open_polyline_curve_create: PolygonFeature,
@@ -231,9 +233,9 @@ impl Kernel {
         let api = unsafe {
             let abi_version: AbiVersion = library.symbol(b"ojcad_abi_version\0")?;
             let actual = abi_version();
-            if actual != 23 {
+            if actual != 24 {
                 return Err(KernelError::IncompatibleAbi {
-                    expected: 23,
+                    expected: 24,
                     actual,
                 });
             }
@@ -255,6 +257,9 @@ impl Kernel {
                     .symbol(b"ojcad_extruded_open_polyline_surface_create\0")?,
                 extruded_open_polyline_surface_vector_create: library
                     .symbol(b"ojcad_extruded_open_polyline_surface_vector_create\0")?,
+                bezier_curve_create: library.symbol(b"ojcad_bezier_curve_create\0")?,
+                extruded_bezier_surface_vector_create: library
+                    .symbol(b"ojcad_extruded_bezier_surface_vector_create\0")?,
                 revolved_open_polyline_surface_create: library
                     .symbol(b"ojcad_revolved_open_polyline_surface_create\0")?,
                 closed_polyline_create: library.symbol(b"ojcad_closed_polyline_create\0")?,
@@ -679,6 +684,59 @@ impl Kernel {
         let mut error = CError::default();
         let status = unsafe {
             (self.api.open_polyline_curve_create)(points, point_count, &mut raw, &mut error)
+        };
+        self.finish_shape_creation(status, raw, error)
+    }
+
+    /// Create an open cubic Bezier curve in XY from four control points in millimetres.
+    pub fn bezier_curve_mm(&self, control_points_xy_mm: &[[f64; 2]]) -> Result<Shape, KernelError> {
+        let point_count =
+            u32::try_from(control_points_xy_mm.len()).map_err(|_| KernelError::Operation {
+                status: 1,
+                message: "Bezier curve contains too many control points".into(),
+            })?;
+        let points = if control_points_xy_mm.is_empty() {
+            std::ptr::null()
+        } else {
+            control_points_xy_mm.as_ptr().cast::<f64>()
+        };
+        let mut raw = std::ptr::null_mut();
+        let mut error = CError::default();
+        let status =
+            unsafe { (self.api.bezier_curve_create)(points, point_count, &mut raw, &mut error) };
+        self.finish_shape_creation(status, raw, error)
+    }
+
+    /// Extrude an open cubic Bezier curve into a surface along a supplied 3D direction.
+    pub fn extruded_bezier_surface_vector_mm(
+        &self,
+        control_points_xy_mm: &[[f64; 2]],
+        height_mm: f64,
+        direction: [f64; 3],
+    ) -> Result<Shape, KernelError> {
+        let point_count =
+            u32::try_from(control_points_xy_mm.len()).map_err(|_| KernelError::Operation {
+                status: 1,
+                message: "Bezier surface contains too many control points".into(),
+            })?;
+        let points = if control_points_xy_mm.is_empty() {
+            std::ptr::null()
+        } else {
+            control_points_xy_mm.as_ptr().cast::<f64>()
+        };
+        let mut raw = std::ptr::null_mut();
+        let mut error = CError::default();
+        let status = unsafe {
+            (self.api.extruded_bezier_surface_vector_create)(
+                points,
+                point_count,
+                height_mm,
+                direction[0],
+                direction[1],
+                direction[2],
+                &mut raw,
+                &mut error,
+            )
         };
         self.finish_shape_creation(status, raw, error)
     }
@@ -1726,6 +1784,36 @@ mod tests {
         }
         assert!(matches!(
             kernel.line_curve_mm([1.0, 1.0], [1.0, 1.0]),
+            Err(KernelError::Operation { status: 1, .. })
+        ));
+    }
+
+    #[test]
+    fn cubic_bezier_curve_and_directional_surface_are_valid() {
+        let kernel = kernel();
+        let control_points = [[-5.0, 0.0], [-2.0, 6.0], [2.0, -6.0], [5.0, 0.0]];
+        let curve = kernel.bezier_curve_mm(&control_points).unwrap();
+        assert!(curve.is_valid().unwrap());
+        let length = curve.length_mm().unwrap();
+        assert!(
+            length > 10.0 && length < 20.0,
+            "unexpected Bezier length: {length}"
+        );
+
+        let surface = kernel
+            .extruded_bezier_surface_vector_mm(&control_points, 5.0, [0.0, 0.0, 1.0])
+            .unwrap();
+        assert!(surface.is_valid().unwrap());
+        let properties = surface.mass_properties().unwrap();
+        assert!((properties[1] - length * 5.0).abs() < length * 5.0 * 1e-2);
+        let bounds = surface.bounds_mm().unwrap();
+        assert!((bounds[5] - 5.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn cubic_bezier_rejects_wrong_control_point_count() {
+        assert!(matches!(
+            kernel().bezier_curve_mm(&[[-1.0, 0.0], [1.0, 0.0]]),
             Err(KernelError::Operation { status: 1, .. })
         ));
     }
