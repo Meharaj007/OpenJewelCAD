@@ -8,9 +8,9 @@
 
 ## Architecture boundaries
 
-- Rust owns application orchestration, project/document services, command coordination, persistence policy, and background task scheduling.
-- C++ owns CAD-kernel-facing geometry and jewellery algorithms. Keep the geometry library independent of Qt and application UI code.
-- Qt owns presentation and interaction. It must not contain CAD algorithms or directly manage OCCT object lifetimes.
+- Rust owns the eframe/egui desktop presentation, application orchestration, project/document services, command coordination, persistence policy, and background task scheduling.
+- C++ owns CAD-kernel-facing geometry and jewellery algorithms. Keep the geometry library independent of desktop UI code.
+- Keep presentation code free of CAD algorithms and direct OCCT object management. Use the safe Rust kernel wrapper and its versioned C ABI.
 - Cross-language calls go through a narrow, versioned C ABI. Do not expose C++ classes, STL containers, exceptions, or OCCT handles across that boundary.
 - Keep all geometry in millimetres internally. Convert at import/export and presentation boundaries, with explicit units.
 - Geometry errors, tolerances, cancellation, and validity must be explicit; never silently accept invalid solids.
@@ -28,7 +28,7 @@
 - For code changes, run the narrowest relevant build and tests, then report exactly what ran and any environment limits.
 - Geometry tests should cover shape validity and tolerances as well as expected dimensions or volume where applicable.
 - Update architecture and roadmap documents when implementation changes a decision or milestone.
-- Do not claim Windows, Qt, OCCT, or Rust/C++ integration support until it has been verified in CI or a documented local build.
+- Do not claim Windows, OCCT, or Rust/C++ integration support until it has been verified in CI or a documented local build.
 
 ## Git workflow
 

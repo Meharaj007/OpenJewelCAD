@@ -2,24 +2,26 @@
 
 This roadmap is a sequence of reviewable gates. Dates and staffing estimates are intentionally omitted until the architecture and toolchain are validated.
 
+The complete command catalog, dependency mapping, test expectations, and user-requested nine-phase feature order are in [TOOL_INVENTORY.md](TOOL_INVENTORY.md). The phases describe feature delivery; the gates below remain prerequisites and release checks.
+
 ## Gate 0 — Architecture review
 
-- Review the proposed Rust/C++/Qt boundaries, document graph, geometry ownership, and persistence approach.
-- Resolve the release license, initial Qt edition, OCCT version and distribution plan.
+- Review the Rust/egui and C++/OCCT boundaries, document graph, geometry ownership, and persistence approach.
+- Resolve the release license, desktop dependency inventory, OCCT version and distribution plan.
 - Define measurable acceptance criteria for the first supported Windows build.
 
 **Exit:** reviewed architecture and recorded decisions; no broad feature implementation yet.
 
 ## Gate 1 — Reproducible toolchain spike
 
-- Build a minimal Qt desktop shell and a headless OCCT geometry library on supported Windows CI.
+- Build a minimal Rust/egui desktop shell and a headless OCCT geometry library on supported Windows CI.
 - Build a Rust crate and call a single C ABI operation in both directions needed by the application.
 - Verify ownership, error conversion, cancellation behavior, and clean shutdown.
-- Record exact compiler, Qt, OCCT, Rust, CMake, and dependency-manager versions and licenses.
+- Record exact compiler, Rust, OCCT, CMake, and dependency-manager versions and licenses.
 
 **Exit:** clean checkout builds reproducibly; one geometry operation runs headlessly and through the ABI; dependency and license inventory is approved.
 
-**Progress:** The Windows MSVC/CMake/vcpkg toolchain is verified. OCCT 8.0.1 is pinned through the vcpkg baseline. A versioned C ABI can create an OCCT box, report volume, and check validity. Rust loads the DLL, owns the shape handle, and verifies the ABI version. CMake and Rust integration tests pass. Qt and the final distribution license review remain open.
+**Progress:** The Windows MSVC/CMake/vcpkg toolchain is verified and OCCT 8.0.1 is pinned. ABI version 22 creates open lines and polylines, arcs, polygon/circle/ellipse curves, planar faces, open-curve extrusion surfaces along any non-zero 3D direction, revolved open-profile surfaces, closed-profile extrusions, and 360° revolved solids through curve → surface → solid workflows; it also supports primitive generators, transforms, world-plane mirrors, booleans, arrays, measurements, validity checks, and tessellation for STL/OBJ export. The Rust/egui desktop app organizes tools by modeling stage, provides a Ctrl+K searchable picker, edits curve direction, closure, and extrusion direction, mirrors models and Boolean tools, and displays exact OCCT results after regeneration. Project version 17 stores extrusion directions and retains mirror settings; versions 1 through 16 remain readable. Multi-feature history, general curve/surface tools, topology picking, broader jewelry generators, ZBrush-inspired sculpting, and distribution license review remain open.
 
 ## Gate 2 — Geometry foundation
 
@@ -76,6 +78,6 @@ This roadmap is a sequence of reviewable gates. Dates and staffing estimates are
 
 ## Risks that can change sequencing
 
-- Qt/OCCT/MSVC packaging compatibility or license constraints may require changing dependency versions or the UI/core boundary.
+- eframe/OCCT/MSVC packaging compatibility or license constraints may require changing dependency versions or the UI/core boundary.
 - Unstable topology references may require a semantic naming strategy before advanced parametric features.
 - Real-world jewellery workflows may change which generator should be first; validate with target designers before expanding feature scope.

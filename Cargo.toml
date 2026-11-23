@@ -4,5 +4,5 @@ members = ["crates/geometry", "crates/document", "crates/cad-ffi", "crates/cli"]
 
 [workspace.package]
 edition = "2021"
-license = "UNLICENSED"
-rust-version = "1.75"
+license = "MIT"
+rust-version = "1.95"
