@@ -16,6 +16,10 @@ type CreateOne = unsafe extern "C" fn(f64, *mut *mut c_void, *mut CError) -> i32
 type CreateTwo = unsafe extern "C" fn(f64, f64, *mut *mut c_void, *mut CError) -> i32;
 type CreateThree = unsafe extern "C" fn(f64, f64, f64, *mut *mut c_void, *mut CError) -> i32;
 type CreateFour = unsafe extern "C" fn(f64, f64, f64, f64, *mut *mut c_void, *mut CError) -> i32;
+type CreateFive =
+    unsafe extern "C" fn(f64, f64, f64, f64, f64, *mut *mut c_void, *mut CError) -> i32;
+type CreateSix =
+    unsafe extern "C" fn(f64, f64, f64, f64, f64, f64, *mut *mut c_void, *mut CError) -> i32;
 type CreateSeven =
     unsafe extern "C" fn(f64, f64, f64, f64, f64, f64, f64, *mut *mut c_void, *mut CError) -> i32;
 type AbiVersion = unsafe extern "C" fn() -> u32;
@@ -54,6 +58,8 @@ type ExtrudedPolygon =
 type ExtrudedPolylineVector =
     unsafe extern "C" fn(*const f64, u32, f64, f64, f64, f64, *mut *mut c_void, *mut CError) -> i32;
 type PolygonFeature = unsafe extern "C" fn(*const f64, u32, *mut *mut c_void, *mut CError) -> i32;
+type RevolveFeature =
+    unsafe extern "C" fn(*const f64, u32, f64, *mut *mut c_void, *mut CError) -> i32;
 type Tessellate =
     unsafe extern "C" fn(*const c_void, f64, f64, *mut *mut c_void, *mut CError) -> i32;
 type MeshCounts = unsafe extern "C" fn(*const c_void, *mut u64, *mut u64, *mut CError) -> i32;
@@ -177,19 +183,25 @@ struct Api {
     torus_create: CreateTwo,
     brilliant_gem_create: BoxCreate,
     extruded_polygon_create: ExtrudedPolygon,
+    extruded_polygon_vector_create: ExtrudedPolylineVector,
     revolved_polygon_create: PolygonFeature,
     extruded_open_polyline_surface_create: ExtrudedPolygon,
     extruded_open_polyline_surface_vector_create: ExtrudedPolylineVector,
-    revolved_open_polyline_surface_create: PolygonFeature,
+    bezier_curve_create: PolygonFeature,
+    extruded_bezier_surface_vector_create: ExtrudedPolylineVector,
+    revolved_bezier_surface_angle_create: RevolveFeature,
+    revolved_open_polyline_surface_angle_create: RevolveFeature,
     closed_polyline_create: PolygonFeature,
     open_polyline_curve_create: PolygonFeature,
     planar_polygon_surface_create: PolygonFeature,
     circle_curve_create: CreateOne,
     planar_circle_surface_create: CreateOne,
     extruded_circle_create: CreateTwo,
+    extruded_circle_vector_create: CreateFive,
     ellipse_curve_create: CreateTwo,
     planar_ellipse_surface_create: CreateTwo,
     extruded_ellipse_create: BoxCreate,
+    extruded_ellipse_vector_create: CreateSix,
     arc_curve_create: CreateThree,
     extruded_arc_surface_create: CreateFour,
     extruded_arc_surface_vector_create: CreateSeven,
@@ -224,9 +236,9 @@ impl Kernel {
         let api = unsafe {
             let abi_version: AbiVersion = library.symbol(b"ojcad_abi_version\0")?;
             let actual = abi_version();
-            if actual != 22 {
+            if actual != 26 {
                 return Err(KernelError::IncompatibleAbi {
-                    expected: 22,
+                    expected: 26,
                     actual,
                 });
             }
@@ -241,13 +253,20 @@ impl Kernel {
                 torus_create: library.symbol(b"ojcad_torus_create\0")?,
                 brilliant_gem_create: library.symbol(b"ojcad_brilliant_gem_create\0")?,
                 extruded_polygon_create: library.symbol(b"ojcad_extruded_polygon_create\0")?,
+                extruded_polygon_vector_create: library
+                    .symbol(b"ojcad_extruded_polygon_vector_create\0")?,
                 revolved_polygon_create: library.symbol(b"ojcad_revolved_polygon_create\0")?,
                 extruded_open_polyline_surface_create: library
                     .symbol(b"ojcad_extruded_open_polyline_surface_create\0")?,
                 extruded_open_polyline_surface_vector_create: library
                     .symbol(b"ojcad_extruded_open_polyline_surface_vector_create\0")?,
-                revolved_open_polyline_surface_create: library
-                    .symbol(b"ojcad_revolved_open_polyline_surface_create\0")?,
+                bezier_curve_create: library.symbol(b"ojcad_bezier_curve_create\0")?,
+                extruded_bezier_surface_vector_create: library
+                    .symbol(b"ojcad_extruded_bezier_surface_vector_create\0")?,
+                revolved_bezier_surface_angle_create: library
+                    .symbol(b"ojcad_revolved_bezier_surface_angle_create\0")?,
+                revolved_open_polyline_surface_angle_create: library
+                    .symbol(b"ojcad_revolved_open_polyline_surface_angle_create\0")?,
                 closed_polyline_create: library.symbol(b"ojcad_closed_polyline_create\0")?,
                 open_polyline_curve_create: library
                     .symbol(b"ojcad_open_polyline_curve_create\0")?,
@@ -257,10 +276,14 @@ impl Kernel {
                 planar_circle_surface_create: library
                     .symbol(b"ojcad_planar_circle_surface_create\0")?,
                 extruded_circle_create: library.symbol(b"ojcad_extruded_circle_create\0")?,
+                extruded_circle_vector_create: library
+                    .symbol(b"ojcad_extruded_circle_vector_create\0")?,
                 ellipse_curve_create: library.symbol(b"ojcad_ellipse_curve_create\0")?,
                 planar_ellipse_surface_create: library
                     .symbol(b"ojcad_planar_ellipse_surface_create\0")?,
                 extruded_ellipse_create: library.symbol(b"ojcad_extruded_ellipse_create\0")?,
+                extruded_ellipse_vector_create: library
+                    .symbol(b"ojcad_extruded_ellipse_vector_create\0")?,
                 arc_curve_create: library.symbol(b"ojcad_arc_curve_create\0")?,
                 extruded_arc_surface_create: library
                     .symbol(b"ojcad_extruded_arc_surface_create\0")?,
@@ -439,6 +462,29 @@ impl Kernel {
         self.finish_shape_creation(status, raw, error)
     }
 
+    /// Extrude a circular profile by travel distance along the supplied 3D direction.
+    pub fn extruded_circle_vector_mm(
+        &self,
+        radius_mm: f64,
+        height_mm: f64,
+        direction: [f64; 3],
+    ) -> Result<Shape, KernelError> {
+        let mut raw = std::ptr::null_mut();
+        let mut error = CError::default();
+        let status = unsafe {
+            (self.api.extruded_circle_vector_create)(
+                radius_mm,
+                height_mm,
+                direction[0],
+                direction[1],
+                direction[2],
+                &mut raw,
+                &mut error,
+            )
+        };
+        self.finish_shape_creation(status, raw, error)
+    }
+
     /// Create an analytic ellipse wire in the XY plane, with X and Y radii in millimetres.
     pub fn ellipse_curve_mm(
         &self,
@@ -475,6 +521,31 @@ impl Kernel {
                 radius_x_mm,
                 radius_y_mm,
                 height_mm,
+                &mut raw,
+                &mut error,
+            )
+        };
+        self.finish_shape_creation(status, raw, error)
+    }
+
+    /// Extrude an elliptical profile by travel distance along the supplied 3D direction.
+    pub fn extruded_ellipse_vector_mm(
+        &self,
+        radius_x_mm: f64,
+        radius_y_mm: f64,
+        height_mm: f64,
+        direction: [f64; 3],
+    ) -> Result<Shape, KernelError> {
+        let mut raw = std::ptr::null_mut();
+        let mut error = CError::default();
+        let status = unsafe {
+            (self.api.extruded_ellipse_vector_create)(
+                radius_x_mm,
+                radius_y_mm,
+                height_mm,
+                direction[0],
+                direction[1],
+                direction[2],
                 &mut raw,
                 &mut error,
             )
@@ -622,6 +693,97 @@ impl Kernel {
         self.finish_shape_creation(status, raw, error)
     }
 
+    /// Create an open cubic Bezier curve in XY from four control points in millimetres.
+    pub fn bezier_curve_mm(&self, control_points_xy_mm: &[[f64; 2]]) -> Result<Shape, KernelError> {
+        let point_count =
+            u32::try_from(control_points_xy_mm.len()).map_err(|_| KernelError::Operation {
+                status: 1,
+                message: "Bezier curve contains too many control points".into(),
+            })?;
+        let points = if control_points_xy_mm.is_empty() {
+            std::ptr::null()
+        } else {
+            control_points_xy_mm.as_ptr().cast::<f64>()
+        };
+        let mut raw = std::ptr::null_mut();
+        let mut error = CError::default();
+        let status =
+            unsafe { (self.api.bezier_curve_create)(points, point_count, &mut raw, &mut error) };
+        self.finish_shape_creation(status, raw, error)
+    }
+
+    /// Extrude an open cubic Bezier curve into a surface along a supplied 3D direction.
+    pub fn extruded_bezier_surface_vector_mm(
+        &self,
+        control_points_xy_mm: &[[f64; 2]],
+        height_mm: f64,
+        direction: [f64; 3],
+    ) -> Result<Shape, KernelError> {
+        let point_count =
+            u32::try_from(control_points_xy_mm.len()).map_err(|_| KernelError::Operation {
+                status: 1,
+                message: "Bezier surface contains too many control points".into(),
+            })?;
+        let points = if control_points_xy_mm.is_empty() {
+            std::ptr::null()
+        } else {
+            control_points_xy_mm.as_ptr().cast::<f64>()
+        };
+        let mut raw = std::ptr::null_mut();
+        let mut error = CError::default();
+        let status = unsafe {
+            (self.api.extruded_bezier_surface_vector_create)(
+                points,
+                point_count,
+                height_mm,
+                direction[0],
+                direction[1],
+                direction[2],
+                &mut raw,
+                &mut error,
+            )
+        };
+        self.finish_shape_creation(status, raw, error)
+    }
+
+    /// Revolve a cubic Bezier curve into an open surface shell around the Y axis.
+    pub fn revolved_bezier_surface_mm(
+        &self,
+        control_points_xy_mm: &[[f64; 2]],
+    ) -> Result<Shape, KernelError> {
+        self.revolved_bezier_surface_angle_mm(control_points_xy_mm, 360.0)
+    }
+
+    /// Revolve a cubic Bezier curve around the Y axis into an open surface shell.
+    pub fn revolved_bezier_surface_angle_mm(
+        &self,
+        control_points_xy_mm: &[[f64; 2]],
+        angle_deg: f64,
+    ) -> Result<Shape, KernelError> {
+        let point_count =
+            u32::try_from(control_points_xy_mm.len()).map_err(|_| KernelError::Operation {
+                status: 1,
+                message: "Bezier surface contains too many control points".into(),
+            })?;
+        let points = if control_points_xy_mm.is_empty() {
+            std::ptr::null()
+        } else {
+            control_points_xy_mm.as_ptr().cast::<f64>()
+        };
+        let mut raw = std::ptr::null_mut();
+        let mut error = CError::default();
+        let status = unsafe {
+            (self.api.revolved_bezier_surface_angle_create)(
+                points,
+                point_count,
+                angle_deg,
+                &mut raw,
+                &mut error,
+            )
+        };
+        self.finish_shape_creation(status, raw, error)
+    }
+
     /// Create an OCCT planar face from a simple closed XY profile in millimetres.
     pub fn planar_polygon_surface_mm(
         &self,
@@ -676,6 +838,40 @@ impl Kernel {
         let mut error = CError::default();
         let status = unsafe {
             (self.api.extruded_polygon_create)(points, point_count, height_mm, &mut raw, &mut error)
+        };
+        self.finish_shape_creation(status, raw, error)
+    }
+
+    /// Extrude a closed polygon by travel distance along the supplied 3D direction.
+    pub fn extruded_polygon_vector_mm(
+        &self,
+        points_xy_mm: &[[f64; 2]],
+        height_mm: f64,
+        direction: [f64; 3],
+    ) -> Result<Shape, KernelError> {
+        let point_count =
+            u32::try_from(points_xy_mm.len()).map_err(|_| KernelError::Operation {
+                status: 1,
+                message: "polygon profile contains too many points".into(),
+            })?;
+        let points = if points_xy_mm.is_empty() {
+            std::ptr::null()
+        } else {
+            points_xy_mm.as_ptr().cast::<f64>()
+        };
+        let mut raw = std::ptr::null_mut();
+        let mut error = CError::default();
+        let status = unsafe {
+            (self.api.extruded_polygon_vector_create)(
+                points,
+                point_count,
+                height_mm,
+                direction[0],
+                direction[1],
+                direction[2],
+                &mut raw,
+                &mut error,
+            )
         };
         self.finish_shape_creation(status, raw, error)
     }
@@ -770,6 +966,15 @@ impl Kernel {
         &self,
         points_xy_mm: &[[f64; 2]],
     ) -> Result<Shape, KernelError> {
+        self.revolved_open_polyline_surface_angle_mm(points_xy_mm, 360.0)
+    }
+
+    /// Revolve an open XY radius/height profile around +Y through an angle in (0, 360].
+    pub fn revolved_open_polyline_surface_angle_mm(
+        &self,
+        points_xy_mm: &[[f64; 2]],
+        angle_deg: f64,
+    ) -> Result<Shape, KernelError> {
         let point_count =
             u32::try_from(points_xy_mm.len()).map_err(|_| KernelError::Operation {
                 status: 1,
@@ -783,9 +988,10 @@ impl Kernel {
         let mut raw = std::ptr::null_mut();
         let mut error = CError::default();
         let status = unsafe {
-            (self.api.revolved_open_polyline_surface_create)(
+            (self.api.revolved_open_polyline_surface_angle_create)(
                 points,
                 point_count,
+                angle_deg,
                 &mut raw,
                 &mut error,
             )
@@ -1397,6 +1603,79 @@ mod tests {
     }
 
     #[test]
+    fn closed_profiles_extrude_to_solids_along_arbitrary_3d_directions() {
+        let kernel = kernel();
+        let direction = [0.0, 3.0, 4.0];
+
+        let polygon = kernel
+            .extruded_polygon_vector_mm(
+                &[[0.0, 0.0], [4.0, 0.0], [4.0, 3.0], [0.0, 3.0]],
+                5.0,
+                direction,
+            )
+            .unwrap();
+        assert!(polygon.is_valid().unwrap());
+        assert!((polygon.volume_mm3().unwrap() - 48.0).abs() < 1e-8);
+        for (actual, expected) in polygon
+            .bounds_mm()
+            .unwrap()
+            .into_iter()
+            .zip([0.0, 0.0, 0.0, 4.0, 6.0, 4.0])
+        {
+            assert!((actual - expected).abs() < 1e-7);
+        }
+
+        let circle = kernel
+            .extruded_circle_vector_mm(2.0, 5.0, direction)
+            .unwrap();
+        assert!(circle.is_valid().unwrap());
+        let circle_volume = circle.volume_mm3().unwrap();
+        assert!(
+            (circle_volume - 16.0 * std::f64::consts::PI).abs() < 1e-4,
+            "directional circle volume was {circle_volume}"
+        );
+        for (actual, expected) in circle
+            .bounds_mm()
+            .unwrap()
+            .into_iter()
+            .zip([-2.0, -2.0, 0.0, 2.0, 5.0, 4.0])
+        {
+            assert!((actual - expected).abs() < 1e-4);
+        }
+
+        let ellipse = kernel
+            .extruded_ellipse_vector_mm(4.0, 2.0, 5.0, direction)
+            .unwrap();
+        assert!(ellipse.is_valid().unwrap());
+        assert!((ellipse.volume_mm3().unwrap() - 32.0 * std::f64::consts::PI).abs() < 1e-4);
+        for (actual, expected) in ellipse
+            .bounds_mm()
+            .unwrap()
+            .into_iter()
+            .zip([-4.0, -2.0, 0.0, 4.0, 5.0, 4.0])
+        {
+            assert!((actual - expected).abs() < 1e-4);
+        }
+
+        assert!(matches!(
+            kernel.extruded_polygon_vector_mm(&[[0.0, 0.0], [4.0, 0.0], [0.0, 3.0]], 5.0, [0.0; 3]),
+            Err(KernelError::Operation { status: 1, .. })
+        ));
+        assert!(matches!(
+            kernel.extruded_circle_vector_mm(2.0, 5.0, [0.0; 3]),
+            Err(KernelError::Operation { status: 1, .. })
+        ));
+        assert!(matches!(
+            kernel.extruded_ellipse_vector_mm(4.0, 2.0, 5.0, [0.0; 3]),
+            Err(KernelError::Operation { status: 1, .. })
+        ));
+        assert!(matches!(
+            kernel.extruded_circle_vector_mm(2.0, 5.0, [1.0, 0.0, 0.0]),
+            Err(KernelError::Operation { status: 1, .. })
+        ));
+    }
+
+    #[test]
     fn an_open_arc_extrudes_to_an_exact_cylindrical_surface() {
         let kernel = kernel();
         let surface = kernel.extruded_arc_surface_mm(2.0, 0.0, 90.0, 3.0).unwrap();
@@ -1446,6 +1725,22 @@ mod tests {
             kernel.revolved_open_polyline_surface_mm(&[[0.0, -2.0], [0.0, 2.0]]),
             Err(KernelError::Operation { status: 1, .. })
         ));
+        let quarter = kernel
+            .revolved_open_polyline_surface_angle_mm(&[[5.0, -2.0], [5.0, 2.0]], 90.0)
+            .unwrap();
+        assert!(quarter.is_valid().unwrap());
+        assert!((quarter.mass_properties().unwrap()[1] - 10.0 * std::f64::consts::PI).abs() < 1e-6);
+        for (actual, expected) in quarter
+            .bounds_mm()
+            .unwrap()
+            .into_iter()
+            .zip([0.0, -2.0, -5.0, 5.0, 2.0, 0.0])
+        {
+            assert!((actual - expected).abs() < 1e-5);
+        }
+        assert!(kernel
+            .revolved_open_polyline_surface_angle_mm(&[[5.0, -2.0], [5.0, 2.0]], 0.0)
+            .is_err());
     }
 
     #[test]
@@ -1560,6 +1855,83 @@ mod tests {
             kernel.line_curve_mm([1.0, 1.0], [1.0, 1.0]),
             Err(KernelError::Operation { status: 1, .. })
         ));
+    }
+
+    #[test]
+    fn cubic_bezier_curve_and_directional_surface_are_valid() {
+        let kernel = kernel();
+        let control_points = [[-5.0, 0.0], [-2.0, 6.0], [2.0, -6.0], [5.0, 0.0]];
+        let curve = kernel.bezier_curve_mm(&control_points).unwrap();
+        assert!(curve.is_valid().unwrap());
+        let length = curve.length_mm().unwrap();
+        assert!(
+            length > 10.0 && length < 20.0,
+            "unexpected Bezier length: {length}"
+        );
+
+        let surface = kernel
+            .extruded_bezier_surface_vector_mm(&control_points, 5.0, [0.0, 0.0, 1.0])
+            .unwrap();
+        assert!(surface.is_valid().unwrap());
+        let properties = surface.mass_properties().unwrap();
+        assert!((properties[1] - length * 5.0).abs() < length * 5.0 * 1e-2);
+        let bounds = surface.bounds_mm().unwrap();
+        assert!((bounds[5] - 5.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn cubic_bezier_rejects_wrong_control_point_count() {
+        assert!(matches!(
+            kernel().bezier_curve_mm(&[[-1.0, 0.0], [1.0, 0.0]]),
+            Err(KernelError::Operation { status: 1, .. })
+        ));
+    }
+
+    #[test]
+    fn cubic_bezier_revolves_to_a_measured_surface_and_rejects_axis_crossing() {
+        let kernel = kernel();
+        let control_points = [[5.0, -2.0], [5.0, -2.0 / 3.0], [5.0, 2.0 / 3.0], [5.0, 2.0]];
+        let surface = kernel.revolved_bezier_surface_mm(&control_points).unwrap();
+        assert!(surface.is_valid().unwrap());
+        let expected_area = 40.0 * std::f64::consts::PI;
+        assert!(
+            (surface.mass_properties().unwrap()[1] - expected_area).abs() < expected_area * 1e-2
+        );
+        for (actual, expected) in surface
+            .bounds_mm()
+            .unwrap()
+            .into_iter()
+            .zip([-5.0, -2.0, -5.0, 5.0, 2.0, 5.0])
+        {
+            assert!((actual - expected).abs() < 1e-5);
+        }
+        assert!(matches!(
+            kernel.revolved_bezier_surface_mm(&[[0.0, -2.0], [5.0, -1.0], [5.0, 1.0], [5.0, 2.0]]),
+            Err(KernelError::Operation { status: 1, .. })
+        ));
+        let quarter = kernel
+            .revolved_bezier_surface_angle_mm(&control_points, 90.0)
+            .unwrap();
+        assert!(quarter.is_valid().unwrap());
+        let expected_quarter_area = 10.0 * std::f64::consts::PI;
+        assert!(
+            (quarter.mass_properties().unwrap()[1] - expected_quarter_area).abs()
+                < expected_quarter_area * 1e-2
+        );
+        for (actual, expected) in quarter
+            .bounds_mm()
+            .unwrap()
+            .into_iter()
+            .zip([0.0, -2.0, -5.0, 5.0, 2.0, 0.0])
+        {
+            assert!((actual - expected).abs() < 1e-5);
+        }
+        for invalid_angle in [0.0, 360.1, f64::NAN] {
+            assert!(matches!(
+                kernel.revolved_bezier_surface_angle_mm(&control_points, invalid_angle),
+                Err(KernelError::Operation { status: 1, .. })
+            ));
+        }
     }
 
     #[test]

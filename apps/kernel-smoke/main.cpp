@@ -89,10 +89,54 @@ int main() {
                                                                  OJCAD_Error* error) {
             return ojcad_extruded_polygon_create(rectangular_profile, 4, 2.0, shape, error);
         }, 24.0) ||
+        !check_shape("directional extruded polygon", [&rectangular_profile](OJCAD_Shape** shape,
+                                                                               OJCAD_Error* error) {
+            return ojcad_extruded_polygon_vector_create(rectangular_profile, 4, 5.0,
+                                                         0.0, 3.0, 4.0, shape, error);
+        }, 48.0) ||
+        !check_shape("directional extruded circle", [](OJCAD_Shape** shape,
+                                                          OJCAD_Error* error) {
+            return ojcad_extruded_circle_vector_create(2.0, 5.0, 0.0, 3.0, 4.0,
+                                                        shape, error);
+        }, 16.0 * std::acos(-1.0)) ||
+        !check_shape("directional extruded ellipse", [](OJCAD_Shape** shape,
+                                                           OJCAD_Error* error) {
+            return ojcad_extruded_ellipse_vector_create(4.0, 2.0, 5.0, 0.0, 3.0, 4.0,
+                                                         shape, error);
+        }, 32.0 * std::acos(-1.0)) ||
         !check_shape("revolved profile", [&revolve_profile](OJCAD_Shape** shape,
                                                               OJCAD_Error* error) {
             return ojcad_revolved_polygon_create(revolve_profile, 4, shape, error);
         }, 64.0 * std::acos(-1.0))) {
+        return 1;
+    }
+
+    OJCAD_Shape* directional_polygon = nullptr;
+    OJCAD_Error directional_error{};
+    double directional_bounds[6]{};
+    if (ojcad_extruded_polygon_vector_create(rectangular_profile, 4, 5.0, 0.0, 3.0, 4.0,
+                                              &directional_polygon, &directional_error) !=
+            OJCAD_STATUS_OK ||
+        ojcad_shape_bounds_mm(directional_polygon, directional_bounds, &directional_error) !=
+            OJCAD_STATUS_OK ||
+        std::abs(directional_bounds[0]) > 1e-7 ||
+        std::abs(directional_bounds[1]) > 1e-7 ||
+        std::abs(directional_bounds[2]) > 1e-7 ||
+        std::abs(directional_bounds[3] - 4.0) > 1e-7 ||
+        std::abs(directional_bounds[4] - 6.0) > 1e-7 ||
+        std::abs(directional_bounds[5] - 4.0) > 1e-7) {
+        std::cerr << "OCCT directional polygon extrusion bounds failed: "
+                  << directional_error.message << '\n';
+        ojcad_shape_destroy(directional_polygon);
+        return 1;
+    }
+    ojcad_shape_destroy(directional_polygon);
+
+    OJCAD_Shape* flat_solid = nullptr;
+    if (ojcad_extruded_circle_vector_create(2.0, 5.0, 1.0, 0.0, 0.0, &flat_solid,
+                                             &directional_error) == OJCAD_STATUS_OK) {
+        std::cerr << "OCCT accepted a zero-volume horizontal solid extrusion\n";
+        ojcad_shape_destroy(flat_solid);
         return 1;
     }
 
@@ -201,6 +245,114 @@ int main() {
     ojcad_shape_destroy(vector_surface);
     std::cout << "Valid arbitrary-direction surface extrusion; area="
               << vector_surface_properties[1] << " mm^2\n";
+
+    const double bezier_control_points[] = {-5.0, 0.0, -2.0, 6.0,
+                                              2.0, -6.0, 5.0, 0.0};
+    OJCAD_Shape* bezier_curve = nullptr;
+    OJCAD_Shape* bezier_surface = nullptr;
+    double bezier_length = 0.0;
+    double bezier_surface_properties[5]{};
+    double bezier_surface_bounds[6]{};
+    int32_t bezier_valid = 0;
+    if (ojcad_bezier_curve_create(bezier_control_points, 4, &bezier_curve, &curve_error) !=
+            OJCAD_STATUS_OK ||
+        ojcad_shape_length_mm(bezier_curve, &bezier_length, &curve_error) != OJCAD_STATUS_OK ||
+        ojcad_extruded_bezier_surface_vector_create(
+            bezier_control_points, 4, 5.0, 0.0, 0.0, 1.0, &bezier_surface, &curve_error) !=
+            OJCAD_STATUS_OK ||
+        ojcad_shape_mass_properties(bezier_surface, bezier_surface_properties, &curve_error) !=
+            OJCAD_STATUS_OK ||
+        ojcad_shape_bounds_mm(bezier_surface, bezier_surface_bounds, &curve_error) !=
+            OJCAD_STATUS_OK ||
+        ojcad_shape_is_valid(bezier_surface, &bezier_valid, &curve_error) != OJCAD_STATUS_OK ||
+        bezier_valid != 1 || bezier_length <= 10.0 || bezier_length >= 20.0 ||
+        std::abs(bezier_surface_properties[1] - bezier_length * 5.0) > bezier_length * 5.0 * 1e-2 ||
+        std::abs(bezier_surface_bounds[5] - 5.0) > 1e-5) {
+        std::cerr << "OCCT Bezier curve-to-surface workflow failed: "
+                  << curve_error.message << "; valid=" << bezier_valid
+                  << ", length=" << bezier_length << ", area=" << bezier_surface_properties[1]
+                  << ", bounds_z=" << bezier_surface_bounds[2] << ".."
+                  << bezier_surface_bounds[5] << '\n';
+        ojcad_shape_destroy(bezier_curve);
+        ojcad_shape_destroy(bezier_surface);
+        return 1;
+    }
+    std::cout << "Valid cubic Bezier curve-to-surface workflow; length=" << bezier_length
+              << " mm; area=" << bezier_surface_properties[1] << " mm^2\n";
+    ojcad_shape_destroy(bezier_curve);
+    ojcad_shape_destroy(bezier_surface);
+
+    const double revolved_bezier_control_points[] = {
+        5.0, -2.0, 5.0, -2.0 / 3.0, 5.0, 2.0 / 3.0, 5.0, 2.0};
+    OJCAD_Shape* revolved_bezier_surface = nullptr;
+    double revolved_bezier_properties[5]{};
+    double revolved_bezier_bounds[6]{};
+    int32_t revolved_bezier_valid = 0;
+    if (ojcad_revolved_bezier_surface_create(
+            revolved_bezier_control_points, 4, &revolved_bezier_surface, &curve_error) !=
+            OJCAD_STATUS_OK ||
+        ojcad_shape_mass_properties(revolved_bezier_surface, revolved_bezier_properties,
+                                    &curve_error) != OJCAD_STATUS_OK ||
+        ojcad_shape_bounds_mm(revolved_bezier_surface, revolved_bezier_bounds, &curve_error) !=
+            OJCAD_STATUS_OK ||
+        ojcad_shape_is_valid(revolved_bezier_surface, &revolved_bezier_valid, &curve_error) !=
+            OJCAD_STATUS_OK ||
+        revolved_bezier_valid != 1 ||
+        std::abs(revolved_bezier_properties[1] - 40.0 * std::acos(-1.0)) >
+            40.0 * std::acos(-1.0) * 1e-2) {
+        std::cerr << "OCCT revolved Bezier surface failed: " << curve_error.message
+                  << "; valid=" << revolved_bezier_valid
+                  << ", area=" << revolved_bezier_properties[1] << '\n';
+        ojcad_shape_destroy(revolved_bezier_surface);
+        return 1;
+    }
+    const double expected_revolved_bezier_bounds[] = {-5.0, -2.0, -5.0, 5.0, 2.0, 5.0};
+    for (int index = 0; index < 6; ++index) {
+        if (std::abs(revolved_bezier_bounds[index] - expected_revolved_bezier_bounds[index]) >
+            1e-5) {
+            std::cerr << "OCCT revolved Bezier surface bounds failed\n";
+            ojcad_shape_destroy(revolved_bezier_surface);
+            return 1;
+        }
+    }
+    std::cout << "Valid revolved cubic Bezier surface; area="
+              << revolved_bezier_properties[1] << " mm^2\n";
+    ojcad_shape_destroy(revolved_bezier_surface);
+
+    OJCAD_Shape* partial_revolved_bezier_surface = nullptr;
+    double partial_revolved_bezier_properties[5]{};
+    double partial_revolved_bezier_bounds[6]{};
+    int32_t partial_revolved_bezier_valid = 0;
+    if (ojcad_revolved_bezier_surface_angle_create(
+            revolved_bezier_control_points, 4, 90.0, &partial_revolved_bezier_surface,
+            &curve_error) != OJCAD_STATUS_OK ||
+        ojcad_shape_mass_properties(partial_revolved_bezier_surface,
+                                    partial_revolved_bezier_properties, &curve_error) !=
+            OJCAD_STATUS_OK ||
+        ojcad_shape_bounds_mm(partial_revolved_bezier_surface, partial_revolved_bezier_bounds,
+                               &curve_error) != OJCAD_STATUS_OK ||
+        ojcad_shape_is_valid(partial_revolved_bezier_surface, &partial_revolved_bezier_valid,
+                              &curve_error) != OJCAD_STATUS_OK ||
+        partial_revolved_bezier_valid != 1 ||
+        std::abs(partial_revolved_bezier_properties[1] - 10.0 * std::acos(-1.0)) > 0.5) {
+        std::cerr << "OCCT partial revolved Bezier surface failed: " << curve_error.message
+                  << "; valid=" << partial_revolved_bezier_valid
+                  << ", area=" << partial_revolved_bezier_properties[1] << '\n';
+        ojcad_shape_destroy(partial_revolved_bezier_surface);
+        return 1;
+    }
+    const double expected_partial_revolved_bezier_bounds[] = {0.0, -2.0, -5.0, 5.0, 2.0, 0.0};
+    for (int index = 0; index < 6; ++index) {
+        if (std::abs(partial_revolved_bezier_bounds[index] -
+                     expected_partial_revolved_bezier_bounds[index]) > 1e-5) {
+            std::cerr << "OCCT partial revolved Bezier surface bounds failed\n";
+            ojcad_shape_destroy(partial_revolved_bezier_surface);
+            return 1;
+        }
+    }
+    std::cout << "Valid 90-degree revolved cubic Bezier surface; area="
+              << partial_revolved_bezier_properties[1] << " mm^2\n";
+    ojcad_shape_destroy(partial_revolved_bezier_surface);
 
     const double revolved_open_profile[] = {5.0, -2.0, 5.0, 2.0};
     OJCAD_Shape* revolved_surface = nullptr;

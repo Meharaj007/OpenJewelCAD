@@ -73,6 +73,7 @@ struct CadApp {
     line: LineFeature,
     open_polyline: OpenPolylineFeature,
     extrusion_direction: [f64; 3],
+    revolution_angle_deg: f64,
     transform: TransformParams,
     material_density_g_cm3: f64,
     analysis: Option<ShapeAnalysis>,
@@ -147,6 +148,7 @@ impl CadApp {
             line: LineFeature::default(),
             open_polyline: OpenPolylineFeature::default(),
             extrusion_direction: [0.0, 0.0, 1.0],
+            revolution_angle_deg: 360.0,
             transform: TransformParams::IDENTITY,
             material_density_g_cm3: 0.0,
             analysis: None,
@@ -191,6 +193,7 @@ impl CadApp {
         self.line = LineFeature::default();
         self.open_polyline = OpenPolylineFeature::default();
         self.extrusion_direction = [0.0, 0.0, 1.0];
+        self.revolution_angle_deg = 360.0;
         self.transform = TransformParams::IDENTITY;
         self.material_density_g_cm3 = 0.0;
         self.analysis = None;
@@ -223,6 +226,7 @@ impl CadApp {
                 self.line = model.line.unwrap_or_default();
                 self.open_polyline = model.open_polyline.unwrap_or_default();
                 self.extrusion_direction = model.extrusion_direction;
+                self.revolution_angle_deg = model.revolution_angle_deg;
                 self.transform = model.transform;
                 self.material_density_g_cm3 = model.material_density_g_cm3.unwrap_or(0.0);
                 self.boolean_enabled = model.boolean.is_some();
@@ -275,6 +279,7 @@ impl CadApp {
                 self.kind = PrimitiveKind::Box;
                 self.parameters_mm = self.kind.defaults();
                 self.extrusion_direction = [0.0, 0.0, 1.0];
+                self.revolution_angle_deg = 360.0;
                 self.transform = TransformParams::IDENTITY;
                 self.material_density_g_cm3 = 0.0;
                 self.analysis = None;
@@ -509,6 +514,7 @@ impl CadApp {
             .with_line(self.kind.uses_line().then_some(self.line))?
             .with_open_polyline(self.kind.uses_open_polyline().then_some(self.open_polyline))?
             .with_extrusion_direction_if_supported(self.extrusion_direction)?
+            .with_revolution_angle_if_supported(self.revolution_angle_deg)?
             .with_material_density(
                 (self.material_density_g_cm3 > 0.0).then_some(self.material_density_g_cm3),
             )?;
@@ -897,6 +903,15 @@ impl CadApp {
                             selected_kind = Some(PrimitiveKind::OpenPolylineCurve);
                         }
                         if ui
+                            .selectable_label(
+                                self.kind == PrimitiveKind::BezierCurve,
+                                "Cubic Bezier",
+                            )
+                            .clicked()
+                        {
+                            selected_kind = Some(PrimitiveKind::BezierCurve);
+                        }
+                        if ui
                             .selectable_label(self.kind == PrimitiveKind::ArcCurve, "Arc")
                             .clicked()
                         {
@@ -948,6 +963,11 @@ impl CadApp {
                         for (kind, label) in [
                             (PrimitiveKind::LineSurface, "Line surface"),
                             (PrimitiveKind::OpenPolylineSurface, "Open path surface"),
+                            (PrimitiveKind::BezierSurface, "Bezier surface"),
+                            (
+                                PrimitiveKind::RevolvedBezierSurface,
+                                "Revolved Bezier surface",
+                            ),
                             (PrimitiveKind::ArcSurface, "Arc surface"),
                             (PrimitiveKind::RevolvedSurface, "Revolved surface"),
                         ] {
@@ -1030,6 +1050,23 @@ impl CadApp {
                 let mut changed = false;
                 let mut next_profile_stage = None;
                 let mut closed_profile_from_path = None;
+                if matches!(
+                    self.kind,
+                    PrimitiveKind::RevolvedSurface | PrimitiveKind::RevolvedBezierSurface
+                ) {
+                    ui.label(egui::RichText::new("Surface of revolution").strong());
+                    changed |= angle_field(
+                        ui,
+                        "Turn angle",
+                        &mut self.revolution_angle_deg,
+                        1.0..=360.0,
+                    );
+                    ui.label(
+                        egui::RichText::new("Use 360° for a full turn.")
+                            .small()
+                            .color(Color32::GRAY),
+                    );
+                }
                 for index in 0..self.kind.parameter_names().len() {
                     changed |= dimension_field(
                         ui,
@@ -1128,11 +1165,21 @@ impl CadApp {
                 changed |= line_changed;
                 let mut open_polyline_changed = false;
                 if self.kind.uses_open_polyline() {
+                    let is_bezier = matches!(
+                        self.kind,
+                        PrimitiveKind::BezierCurve
+                            | PrimitiveKind::BezierSurface
+                            | PrimitiveKind::RevolvedBezierSurface
+                    );
                     ui.add_space(8.0);
                     ui.separator();
-                    ui.label(egui::RichText::new("Open path · XY mm").strong());
+                    ui.label(egui::RichText::new(if is_bezier { "Bezier control points · XY mm" } else { "Open path · XY mm" }).strong());
                     ui.label(
-                        egui::RichText::new("Edit the path in order; the last point stays open.")
+                        egui::RichText::new(if is_bezier {
+                            "P1 and P4 are endpoints; P2 and P3 shape the curve."
+                        } else {
+                            "Edit the path in order; the last point stays open."
+                        })
                             .small()
                             .color(Color32::GRAY),
                     );
@@ -1164,7 +1211,7 @@ impl CadApp {
                                     .add(egui::DragValue::new(coordinate).speed(0.1).suffix(" mm"))
                                     .changed();
                             }
-                            if ui.small_button("×").clicked() {
+                            if !is_bezier && ui.small_button("×").clicked() {
                                 remove_vertex = Some(index);
                             }
                         });
@@ -1178,7 +1225,7 @@ impl CadApp {
                             Err(error) => self.set_status(error.to_string(), true),
                         }
                     }
-                    if ui.button("Add point to path").clicked() {
+                    if !is_bezier && ui.button("Add point to path").clicked() {
                         match self.open_polyline.add_point() {
                             Ok(()) => open_polyline_changed = true,
                             Err(error) => self.set_status(error.to_string(), true),
@@ -1188,6 +1235,30 @@ impl CadApp {
                         && ui.button("Extrude curve to surface →").clicked()
                     {
                         next_profile_stage = Some(PrimitiveKind::OpenPolylineSurface);
+                    }
+                    if self.kind == PrimitiveKind::BezierCurve
+                        && ui.button("Extrude curve to surface →").clicked()
+                    {
+                        next_profile_stage = Some(PrimitiveKind::BezierSurface);
+                    }
+                    if self.kind == PrimitiveKind::BezierCurve {
+                        let positive_radius_profile = self
+                            .open_polyline
+                            .points()
+                            .iter()
+                            .all(|point| point[0] > 1e-9);
+                        if ui
+                            .add_enabled(
+                                positive_radius_profile,
+                                egui::Button::new("Revolve curve into surface →"),
+                            )
+                            .on_hover_text(
+                                "Every Bezier control point must stay at positive X radius from the Y axis.",
+                            )
+                            .clicked()
+                        {
+                            next_profile_stage = Some(PrimitiveKind::RevolvedBezierSurface);
+                        }
                     }
                     if self.kind == PrimitiveKind::OpenPolylineCurve {
                         let positive_radius_profile = self
@@ -1206,7 +1277,10 @@ impl CadApp {
                             next_profile_stage = Some(PrimitiveKind::RevolvedSurface);
                         }
                     }
-                    if self.kind == PrimitiveKind::RevolvedSurface {
+                    if matches!(
+                        self.kind,
+                        PrimitiveKind::RevolvedSurface | PrimitiveKind::RevolvedBezierSurface
+                    ) {
                         ui.label(
                             egui::RichText::new(
                                 "Every profile point must stay at positive X radius from the Y axis.",
@@ -1862,16 +1936,47 @@ impl CadApp {
         let circle_radius = self.parameters_mm[0];
         let ellipse_radii = [self.parameters_mm[0], self.parameters_mm[1]];
         let arc_radius = self.parameters_mm[0];
+        let previous_revolution_angle_deg = self.revolution_angle_deg;
+        let uses_surface_revolution = |kind| {
+            matches!(
+                kind,
+                PrimitiveKind::RevolvedSurface | PrimitiveKind::RevolvedBezierSurface
+            )
+        };
         self.kind = kind;
         self.parameters_mm = kind.defaults();
+        self.revolution_angle_deg =
+            if uses_surface_revolution(previous_kind) && uses_surface_revolution(kind) {
+                previous_revolution_angle_deg
+            } else {
+                360.0
+            };
         if kind.uses_arc() && !previous_kind.uses_arc() {
             self.arc = ArcFeature::default();
         }
         if kind.uses_line() && !previous_kind.uses_line() {
             self.line = LineFeature::default();
         }
-        if kind.uses_open_polyline() && !previous_kind.uses_open_polyline() {
-            self.open_polyline = if kind == PrimitiveKind::RevolvedSurface {
+        let is_bezier = |kind| {
+            matches!(
+                kind,
+                PrimitiveKind::BezierCurve
+                    | PrimitiveKind::BezierSurface
+                    | PrimitiveKind::RevolvedBezierSurface
+            )
+        };
+        let entering_bezier = is_bezier(kind) && !is_bezier(previous_kind);
+        let leaving_bezier = is_bezier(previous_kind) && !is_bezier(kind);
+        if (kind.uses_open_polyline() && !previous_kind.uses_open_polyline())
+            || entering_bezier
+            || leaving_bezier
+        {
+            self.open_polyline = if kind == PrimitiveKind::RevolvedBezierSurface && entering_bezier
+            {
+                OpenPolylineFeature::revolved_bezier_default()
+            } else if entering_bezier {
+                OpenPolylineFeature::bezier_default()
+            } else if kind == PrimitiveKind::RevolvedSurface {
                 OpenPolylineFeature::revolved_surface_default()
             } else {
                 OpenPolylineFeature::default()
@@ -2065,6 +2170,7 @@ impl CadApp {
             self.line,
             self.open_polyline,
             self.extrusion_direction,
+            self.revolution_angle_deg,
             self.transform,
             self.yaw,
             self.elevation,
@@ -2126,6 +2232,7 @@ fn available_tools() -> &'static [(&'static str, PrimitiveKind)] {
         ("Curves", K::PolylineCurve),
         ("Curves", K::LineCurve),
         ("Curves", K::OpenPolylineCurve),
+        ("Curves", K::BezierCurve),
         ("Curves", K::ArcCurve),
         ("Curves", K::CircleCurve),
         ("Curves", K::EllipseCurve),
@@ -2134,6 +2241,8 @@ fn available_tools() -> &'static [(&'static str, PrimitiveKind)] {
         ("Surfaces", K::PlanarEllipseSurface),
         ("Surfaces", K::LineSurface),
         ("Surfaces", K::OpenPolylineSurface),
+        ("Surfaces", K::BezierSurface),
+        ("Surfaces", K::RevolvedBezierSurface),
         ("Surfaces", K::ArcSurface),
         ("Surfaces", K::RevolvedSurface),
         ("Solids", K::Box),
@@ -2334,6 +2443,7 @@ fn draw_primitive_preview(
     line: LineFeature,
     open_polyline: OpenPolylineFeature,
     extrusion_direction: [f64; 3],
+    revolution_angle_deg: f64,
     transform: TransformParams,
     yaw: f32,
     elevation: f32,
@@ -2383,11 +2493,29 @@ fn draw_primitive_preview(
             && OpenPolylineFeature::from_points(open_polyline.points()).is_err())
         || (kind == PrimitiveKind::RevolvedSurface
             && open_polyline.points().iter().any(|point| point[0] <= 1e-9))
+        || (kind == PrimitiveKind::RevolvedBezierSurface
+            && open_polyline.points().iter().any(|point| point[0] <= 1e-9))
+        || (matches!(
+            kind,
+            PrimitiveKind::RevolvedSurface | PrimitiveKind::RevolvedBezierSurface
+        ) && (!revolution_angle_deg.is_finite()
+            || revolution_angle_deg <= 0.0
+            || revolution_angle_deg > 360.0))
         || (kind == PrimitiveKind::RevolvedSolid
             && profile.points().iter().any(|point| point[0] <= 1e-9))
         || (kind.uses_profile() && super::validate_polygon_profile(profile.points()).is_err())
         || (kind.uses_vector_extrusion()
-            && super::validate_extrusion_direction(extrusion_direction).is_err());
+            && super::validate_extrusion_direction(extrusion_direction).is_err())
+        || (matches!(
+            kind,
+            PrimitiveKind::ExtrudedPolygon
+                | PrimitiveKind::ExtrudedCircle
+                | PrimitiveKind::ExtrudedEllipse
+        ) && extrusion_direction[2].abs()
+            <= extrusion_direction[0]
+                .hypot(extrusion_direction[1])
+                .hypot(extrusion_direction[2])
+                * 1e-12);
     if cached_mesh.is_none() && invalid {
         painter.text(
             rect.center(),
@@ -2416,6 +2544,7 @@ fn draw_primitive_preview(
             line,
             open_polyline,
             extrusion_direction,
+            revolution_angle_deg,
         );
         transform_preview_mesh(
             &mut mesh,
@@ -2424,13 +2553,21 @@ fn draw_primitive_preview(
             profile,
             line,
             open_polyline,
+            extrusion_direction,
             transform,
         );
         if let Some(pattern) = pattern {
             mesh = array_preview_mesh(
                 &mesh,
                 pattern,
-                preview_extent(kind, parameters, profile, line, open_polyline),
+                preview_model_extent(
+                    kind,
+                    parameters,
+                    profile,
+                    line,
+                    open_polyline,
+                    extrusion_direction,
+                ),
             );
         }
         mesh
@@ -2501,7 +2638,10 @@ fn draw_primitive_preview(
         let count = projected.len();
         let segment_count = if matches!(
             kind,
-            PrimitiveKind::ArcCurve | PrimitiveKind::LineCurve | PrimitiveKind::OpenPolylineCurve
+            PrimitiveKind::ArcCurve
+                | PrimitiveKind::LineCurve
+                | PrimitiveKind::OpenPolylineCurve
+                | PrimitiveKind::BezierCurve
         ) {
             count.saturating_sub(1)
         } else {
@@ -2519,6 +2659,10 @@ fn draw_primitive_preview(
                 painter.circle_filled(point.position, 3.5, Color32::WHITE);
             }
         } else if kind == PrimitiveKind::LineCurve {
+            for point in [projected.first(), projected.last()].into_iter().flatten() {
+                painter.circle_filled(point.position, 3.5, Color32::WHITE);
+            }
+        } else if kind == PrimitiveKind::BezierCurve {
             for point in [projected.first(), projected.last()].into_iter().flatten() {
                 painter.circle_filled(point.position, 3.5, Color32::WHITE);
             }
@@ -2643,6 +2787,7 @@ fn make_preview_mesh(
     line: LineFeature,
     open_polyline: OpenPolylineFeature,
     extrusion_direction: [f64; 3],
+    revolution_angle_deg: f64,
 ) -> PreviewMesh {
     match kind {
         PrimitiveKind::Box => box_preview_mesh(parameters),
@@ -2690,16 +2835,48 @@ fn make_preview_mesh(
                 faces: Vec::new(),
             }
         }
+        PrimitiveKind::BezierCurve => {
+            let extent = preview_extent(kind, parameters, profile, line, open_polyline);
+            let points = sampled_bezier_points(open_polyline.points(), 48);
+            PreviewMesh {
+                vertices: points
+                    .iter()
+                    .map(|point| scaled_point([point[0], point[1], 0.0], extent))
+                    .collect(),
+                faces: Vec::new(),
+            }
+        }
         PrimitiveKind::OpenPolylineSurface => open_curve_surface_preview_mesh(
             open_polyline.points(),
             parameters[0],
             extrusion_direction,
             preview_extent(kind, parameters, profile, line, open_polyline),
         ),
+        PrimitiveKind::BezierSurface => {
+            let extent = preview_model_extent(
+                kind,
+                parameters,
+                profile,
+                line,
+                open_polyline,
+                extrusion_direction,
+            );
+            let points = sampled_bezier_points(open_polyline.points(), 48);
+            open_curve_surface_preview_mesh(&points, parameters[0], extrusion_direction, extent)
+        }
         PrimitiveKind::RevolvedSurface => revolved_open_polyline_surface_preview_mesh(
-            open_polyline,
+            open_polyline.points(),
             preview_extent(kind, parameters, profile, line, open_polyline),
+            revolution_angle_deg,
         ),
+        PrimitiveKind::RevolvedBezierSurface => {
+            let points = sampled_bezier_points(open_polyline.points(), 48);
+            revolved_open_polyline_surface_preview_mesh(
+                &points,
+                preview_extent(kind, parameters, profile, line, open_polyline),
+                revolution_angle_deg,
+            )
+        }
         PrimitiveKind::PolylineCurve => polyline_curve_preview_mesh(profile),
         PrimitiveKind::ArcCurve => arc_curve_preview_mesh(
             parameters[0],
@@ -2722,13 +2899,45 @@ fn make_preview_mesh(
         PrimitiveKind::PlanarEllipseSurface => {
             planar_surface_preview_mesh(ellipse_profile(parameters[0], parameters[1]))
         }
-        PrimitiveKind::ExtrudedPolygon => polygon_prism_preview_mesh(profile, parameters[0]),
-        PrimitiveKind::ExtrudedCircle => cylinder_preview_mesh(parameters[0], parameters[1]),
-        PrimitiveKind::ExtrudedEllipse => {
-            polygon_prism_preview_mesh(ellipse_profile(parameters[0], parameters[1]), parameters[2])
+        PrimitiveKind::ExtrudedPolygon => {
+            polygon_prism_preview_mesh(profile, parameters[0], extrusion_direction)
         }
+        PrimitiveKind::ExtrudedCircle => polygon_prism_preview_mesh(
+            circle_profile(parameters[0]),
+            parameters[1],
+            extrusion_direction,
+        ),
+        PrimitiveKind::ExtrudedEllipse => polygon_prism_preview_mesh(
+            ellipse_profile(parameters[0], parameters[1]),
+            parameters[2],
+            extrusion_direction,
+        ),
         PrimitiveKind::RevolvedSolid => revolved_profile_preview_mesh(profile),
     }
+}
+
+fn sampled_bezier_points(control_points: &[[f64; 2]], segments: usize) -> Vec<[f64; 2]> {
+    if control_points.len() != 4 || segments == 0 {
+        return Vec::new();
+    }
+    (0..=segments)
+        .map(|step| {
+            let t = step as f64 / segments as f64;
+            let one_minus_t = 1.0 - t;
+            let weights = [
+                one_minus_t.powi(3),
+                3.0 * one_minus_t.powi(2) * t,
+                3.0 * one_minus_t * t.powi(2),
+                t.powi(3),
+            ];
+            let mut point = [0.0; 2];
+            for (control, weight) in control_points.iter().zip(weights) {
+                point[0] += control[0] * weight;
+                point[1] += control[1] * weight;
+            }
+            point
+        })
+        .collect()
 }
 
 fn open_curve_surface_preview_mesh(
@@ -2796,16 +3005,18 @@ fn open_curve_surface_preview_mesh(
 }
 
 fn revolved_open_polyline_surface_preview_mesh(
-    profile: OpenPolylineFeature,
+    points: &[[f64; 2]],
     extent: f64,
+    angle_deg: f64,
 ) -> PreviewMesh {
     const SEGMENTS: usize = 48;
-    let mut vertices = Vec::with_capacity(profile.points().len().saturating_sub(1) * SEGMENTS * 4);
-    let mut faces = Vec::with_capacity(profile.points().len().saturating_sub(1) * SEGMENTS);
-    for segment in profile.points().windows(2) {
+    let mut vertices = Vec::with_capacity(points.len().saturating_sub(1) * SEGMENTS * 4);
+    let mut faces = Vec::with_capacity(points.len().saturating_sub(1) * SEGMENTS);
+    let sweep = angle_deg.to_radians();
+    for segment in points.windows(2) {
         for step in 0..SEGMENTS {
-            let angle_a = std::f64::consts::TAU * step as f64 / SEGMENTS as f64;
-            let angle_b = std::f64::consts::TAU * (step + 1) as f64 / SEGMENTS as f64;
+            let angle_a = sweep * step as f64 / SEGMENTS as f64;
+            let angle_b = sweep * (step + 1) as f64 / SEGMENTS as f64;
             let point = |radius: f64, height: f64, angle: f64| {
                 scaled_point(
                     [radius * angle.cos(), height, -radius * angle.sin()],
@@ -2926,9 +3137,17 @@ fn transform_preview_mesh(
     profile: PolygonProfile,
     line: LineFeature,
     open_polyline: OpenPolylineFeature,
+    extrusion_direction: [f64; 3],
     transform: TransformParams,
 ) {
-    let extent = preview_extent(kind, parameters, profile, line, open_polyline);
+    let extent = preview_model_extent(
+        kind,
+        parameters,
+        profile,
+        line,
+        open_polyline,
+        extrusion_direction,
+    );
     let angles = transform.rotation_deg.map(f64::to_radians);
     let (sin_x, cos_x) = angles[0].sin_cos();
     let (sin_y, cos_y) = angles[1].sin_cos();
@@ -3010,6 +3229,9 @@ fn preview_extent(
             .fold(parameters[0].max(1.0), f64::max),
         PrimitiveKind::OpenPolylineCurve
         | PrimitiveKind::OpenPolylineSurface
+        | PrimitiveKind::BezierCurve
+        | PrimitiveKind::BezierSurface
+        | PrimitiveKind::RevolvedBezierSurface
         | PrimitiveKind::RevolvedSurface => open_polyline
             .points()
             .iter()
@@ -3047,6 +3269,60 @@ fn preview_extent(
             .map(|value| value.abs())
             .fold(1.0, f64::max),
     }
+}
+
+fn preview_model_extent(
+    kind: PrimitiveKind,
+    parameters: [f64; 3],
+    profile: PolygonProfile,
+    line: LineFeature,
+    open_polyline: OpenPolylineFeature,
+    extrusion_direction: [f64; 3],
+) -> f64 {
+    let mut extent = preview_extent(kind, parameters, profile, line, open_polyline);
+    let (profile, height) = match kind {
+        PrimitiveKind::ExtrudedPolygon => (Some(profile), parameters[0]),
+        PrimitiveKind::ExtrudedCircle => (Some(circle_profile(parameters[0])), parameters[1]),
+        PrimitiveKind::ExtrudedEllipse => (
+            Some(ellipse_profile(parameters[0], parameters[1])),
+            parameters[2],
+        ),
+        PrimitiveKind::BezierSurface => (None, parameters[0]),
+        _ => (None, 0.0),
+    };
+    if let Some(profile) = profile {
+        let length = extrusion_direction[0]
+            .hypot(extrusion_direction[1])
+            .hypot(extrusion_direction[2]);
+        if length.is_finite() && length > 1e-12 && height.is_finite() {
+            let offset = extrusion_direction.map(|component| component / length * height);
+            for point in profile.points() {
+                extent = extent
+                    .max(point[0].abs())
+                    .max(point[1].abs())
+                    .max((point[0] + offset[0]).abs())
+                    .max((point[1] + offset[1]).abs())
+                    .max(offset[2].abs());
+            }
+        }
+    }
+    if kind == PrimitiveKind::BezierSurface {
+        let length = extrusion_direction[0]
+            .hypot(extrusion_direction[1])
+            .hypot(extrusion_direction[2]);
+        if length.is_finite() && length > 1e-12 && parameters[0].is_finite() {
+            let offset = extrusion_direction.map(|component| component / length * parameters[0]);
+            for point in open_polyline.points() {
+                extent = extent
+                    .max(point[0].abs())
+                    .max(point[1].abs())
+                    .max((point[0] + offset[0]).abs())
+                    .max((point[1] + offset[1]).abs())
+                    .max(offset[2].abs());
+            }
+        }
+    }
+    extent.max(1e-6)
 }
 
 fn round_brilliant_preview_mesh(parameters: [f64; 3]) -> PreviewMesh {
@@ -3121,21 +3397,31 @@ fn preview_triangle(vertices: &[[f32; 3]], indices: [usize; 3]) -> PreviewFace {
     )
 }
 
-fn polygon_prism_preview_mesh(profile: PolygonProfile, height_mm: f64) -> PreviewMesh {
+fn polygon_prism_preview_mesh(
+    profile: PolygonProfile,
+    height_mm: f64,
+    direction: [f64; 3],
+) -> PreviewMesh {
     let points = profile.points();
     let count = points.len();
-    let extent = preview_extent(
-        PrimitiveKind::ExtrudedPolygon,
-        [height_mm, 0.0, 0.0],
-        profile,
-        LineFeature::default(),
-        OpenPolylineFeature::default(),
-    );
+    let length = direction[0].hypot(direction[1]).hypot(direction[2]);
+    if !length.is_finite() || length <= 1e-12 || !height_mm.is_finite() {
+        return PreviewMesh {
+            vertices: Vec::new(),
+            faces: Vec::new(),
+        };
+    }
+    let offset = direction.map(|component| component / length * height_mm);
+    let extent = vector_extrusion_preview_extent(profile, height_mm, direction);
     let mut vertices = Vec::with_capacity(count * 2);
-    for z in [0.0, height_mm] {
-        for point in points {
-            vertices.push(scaled_point([point[0], point[1], z], extent));
-        }
+    for point in points {
+        vertices.push(scaled_point([point[0], point[1], 0.0], extent));
+    }
+    for point in points {
+        vertices.push(scaled_point(
+            [point[0] + offset[0], point[1] + offset[1], offset[2]],
+            extent,
+        ));
     }
 
     let mut faces = Vec::with_capacity(count * 4);
@@ -3145,33 +3431,72 @@ fn polygon_prism_preview_mesh(profile: PolygonProfile, height_mm: f64) -> Previe
         let dx = points[next][0] - points[index][0];
         let dy = points[next][1] - points[index][1];
         let normal = if orientation > 0.0 {
-            [dy as f32, -dx as f32, 0.0]
+            [
+                dy * offset[2],
+                -dx * offset[2],
+                dx * offset[1] - dy * offset[0],
+            ]
         } else {
-            [-dy as f32, dx as f32, 0.0]
+            [
+                -dy * offset[2],
+                dx * offset[2],
+                dy * offset[0] - dx * offset[1],
+            ]
         };
         faces.push(preview_face(
             &[index, next, count + next, count + index],
-            normal,
+            normal.map(|v| v as f32),
         ));
     }
 
     if let Some(triangles) = triangulate_polygon(points) {
+        let top_matches_profile = orientation * offset[2] > 0.0;
         for triangle in triangles {
+            let base = [triangle[0], triangle[1], triangle[2]];
+            let top = [
+                count + triangle[0],
+                count + triangle[1],
+                count + triangle[2],
+            ];
             faces.push(preview_triangle(
                 &vertices,
-                [triangle[0], triangle[2], triangle[1]],
+                if top_matches_profile {
+                    [base[0], base[2], base[1]]
+                } else {
+                    base
+                },
             ));
             faces.push(preview_triangle(
                 &vertices,
-                [
-                    count + triangle[0],
-                    count + triangle[1],
-                    count + triangle[2],
-                ],
+                if top_matches_profile {
+                    top
+                } else {
+                    [top[0], top[2], top[1]]
+                },
             ));
         }
     }
     PreviewMesh { vertices, faces }
+}
+
+fn vector_extrusion_preview_extent(
+    profile: PolygonProfile,
+    height_mm: f64,
+    direction: [f64; 3],
+) -> f64 {
+    let length = direction[0].hypot(direction[1]).hypot(direction[2]);
+    if !length.is_finite() || length <= 1e-12 || !height_mm.is_finite() {
+        return 1.0;
+    }
+    let offset = direction.map(|component| component / length * height_mm);
+    profile.points().iter().fold(1e-6_f64, |extent, point| {
+        extent
+            .max(point[0].abs())
+            .max(point[1].abs())
+            .max((point[0] + offset[0]).abs())
+            .max((point[1] + offset[1]).abs())
+            .max(offset[2].abs())
+    })
 }
 
 fn polyline_curve_preview_mesh(profile: PolygonProfile) -> PreviewMesh {
@@ -3667,3 +3992,123 @@ fn shade(base: [u8; 3], brightness: f32) -> Color32 {
 
 #[allow(dead_code)]
 fn _keep_vec2_type_import_used(_: Vec2) {}
+
+#[cfg(test)]
+mod preview_tests {
+    use super::*;
+
+    #[test]
+    fn angled_closed_profile_preview_tracks_direction_and_stays_fitted() {
+        let profile = circle_profile(2.0);
+        let direction = [0.0, 3.0, 4.0];
+        let mesh = polygon_prism_preview_mesh(profile, 5.0, direction);
+        assert_eq!(mesh.vertices.len(), 128);
+        assert!(mesh.faces.len() > 64);
+        for vertex in &mesh.vertices {
+            assert!(vertex.iter().all(|coordinate| coordinate.is_finite()));
+            assert!(vertex
+                .iter()
+                .all(|coordinate| coordinate.abs() <= 1.0 + 1e-6));
+        }
+
+        let extent = vector_extrusion_preview_extent(profile, 5.0, direction);
+        let first_top_vertex = mesh.vertices[64];
+        for (actual, expected) in first_top_vertex.into_iter().zip([0.4, 0.6, 0.8]) {
+            assert!((f64::from(actual) - expected).abs() < 1e-6);
+        }
+        assert!((extent - 5.0).abs() < 1e-9);
+        assert!(mesh
+            .faces
+            .iter()
+            .flat_map(|face| &face.indices)
+            .all(|index| *index < mesh.vertices.len()));
+    }
+
+    #[test]
+    fn bezier_preview_is_smooth_and_extruded_surface_stays_inside_viewport() {
+        let controls = OpenPolylineFeature::bezier_default();
+        let samples = sampled_bezier_points(controls.points(), 48);
+        assert_eq!(samples.len(), 49);
+        assert_eq!(samples[0], controls.points()[0]);
+        assert_eq!(samples[48], controls.points()[3]);
+        assert!(samples[12][1] > 1.0);
+        assert!(samples[36][1] < -1.0);
+
+        let direction = [0.0, 3.0, 4.0];
+        let extent = preview_model_extent(
+            PrimitiveKind::BezierSurface,
+            [5.0, 0.0, 0.0],
+            PolygonProfile::default(),
+            LineFeature::default(),
+            controls,
+            direction,
+        );
+        assert!((extent - 9.0).abs() < 1e-9);
+        let mesh = make_preview_mesh(
+            PrimitiveKind::BezierSurface,
+            [5.0, 0.0, 0.0],
+            PolygonProfile::default(),
+            ArcFeature::default(),
+            LineFeature::default(),
+            controls,
+            direction,
+            360.0,
+        );
+        assert_eq!(mesh.faces.len(), 48);
+        assert!(mesh
+            .vertices
+            .iter()
+            .flatten()
+            .all(|value| value.is_finite()));
+        assert!(mesh
+            .vertices
+            .iter()
+            .flatten()
+            .all(|value| value.abs() <= 1.0 + 1e-6));
+    }
+
+    #[test]
+    fn revolved_bezier_preview_is_fitted_and_has_surface_faces() {
+        let controls = OpenPolylineFeature::revolved_bezier_default();
+        let extent = preview_extent(
+            PrimitiveKind::RevolvedBezierSurface,
+            [0.0; 3],
+            PolygonProfile::default(),
+            LineFeature::default(),
+            controls,
+        );
+        assert!((extent - 6.0).abs() < 1e-9);
+
+        let mesh = make_preview_mesh(
+            PrimitiveKind::RevolvedBezierSurface,
+            [0.0; 3],
+            PolygonProfile::default(),
+            ArcFeature::default(),
+            LineFeature::default(),
+            controls,
+            [0.0, 0.0, 1.0],
+            90.0,
+        );
+        assert_eq!(mesh.faces.len(), 48 * 48);
+        assert!(mesh
+            .vertices
+            .iter()
+            .flatten()
+            .all(|value| value.is_finite() && value.abs() <= 1.0 + 1e-6));
+        assert!(
+            mesh.vertices
+                .iter()
+                .map(|point| point[2])
+                .fold(0.0_f32, f32::min)
+                < -0.8
+        );
+        assert!(
+            mesh.vertices
+                .iter()
+                .map(|point| point[2])
+                .fold(0.0_f32, f32::max)
+                .abs()
+                < 1e-6
+        );
+    }
+}

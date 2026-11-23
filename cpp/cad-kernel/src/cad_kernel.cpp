@@ -28,6 +28,7 @@
 #include <GProp_GProps.hxx>
 #include <GCPnts_AbscissaPoint.hxx>
 #include <GeomAdaptor_Curve.hxx>
+#include <Geom_BezierCurve.hxx>
 #include <Bnd_Box.hxx>
 #include <gp_Ax1.hxx>
 #include <gp_Ax2.hxx>
@@ -51,6 +52,7 @@
 #include <TopoDS_Shell.hxx>
 #include <TopoDS_Shape.hxx>
 #include <TopoDS_Wire.hxx>
+#include <NCollection_Array1.hxx>
 
 #include <cmath>
 #include <algorithm>
@@ -147,6 +149,40 @@ TopoDS_Wire ellipse_wire(double radius_x_mm, double radius_y_mm) {
     BRepBuilderAPI_MakeWire wire(edge.Edge());
     if (!wire.IsDone()) return TopoDS_Wire{};
     return wire.Wire();
+}
+
+TopoDS_Wire bezier_wire(const std::array<gp_Pnt, 4>& control_points) {
+    NCollection_Array1<gp_Pnt> poles(1, 4);
+    for (Standard_Integer index = 1; index <= 4; ++index) {
+        poles.SetValue(index, control_points[static_cast<size_t>(index - 1)]);
+    }
+    Handle(Geom_BezierCurve) curve = new Geom_BezierCurve(poles);
+    BRepBuilderAPI_MakeEdge edge_builder(curve);
+    if (!edge_builder.IsDone()) return TopoDS_Wire{};
+    BRepBuilderAPI_MakeWire wire_builder;
+    wire_builder.Add(edge_builder.Edge());
+    return wire_builder.IsDone() ? wire_builder.Wire() : TopoDS_Wire{};
+}
+
+bool make_extrusion_displacement(double height_mm, double direction_x, double direction_y,
+                                double direction_z, gp_Vec& displacement) {
+    const double direction_length = std::hypot(std::hypot(direction_x, direction_y), direction_z);
+    if (!std::isfinite(height_mm) || height_mm <= 0.0 || height_mm > 1e7 ||
+        !std::isfinite(direction_x) || !std::isfinite(direction_y) ||
+        !std::isfinite(direction_z) || !std::isfinite(direction_length) ||
+        direction_length <= 1e-12) {
+        return false;
+    }
+    displacement = gp_Vec(direction_x, direction_y, direction_z) * (height_mm / direction_length);
+    return true;
+}
+
+bool make_solid_extrusion_displacement(double height_mm, double direction_x, double direction_y,
+                                       double direction_z, gp_Vec& displacement) {
+    const double direction_length = std::hypot(std::hypot(direction_x, direction_y), direction_z);
+    return make_extrusion_displacement(height_mm, direction_x, direction_y, direction_z,
+                                       displacement) &&
+           std::abs(direction_z) > direction_length * 1e-12;
 }
 
 TopoDS_Shape make_round_brilliant(double diameter_mm, double total_height_mm,
@@ -502,7 +538,7 @@ extern "C" OJCAD_Status ojcad_brilliant_gem_create(double diameter_mm, double to
     }, out_shape, out_error);
 }
 
-extern "C" uint32_t ojcad_abi_version(void) { return 22; }
+extern "C" uint32_t ojcad_abi_version(void) { return 26; }
 
 extern "C" OJCAD_Status ojcad_circle_curve_create(double radius_mm,
                                                     OJCAD_Shape** out_shape,
@@ -549,22 +585,35 @@ extern "C" OJCAD_Status ojcad_planar_circle_surface_create(double radius_mm,
 extern "C" OJCAD_Status ojcad_extruded_circle_create(double radius_mm, double height_mm,
                                                       OJCAD_Shape** out_shape,
                                                       OJCAD_Error* out_error) {
+    return ojcad_extruded_circle_vector_create(radius_mm, height_mm, 0.0, 0.0, 1.0,
+                                              out_shape, out_error);
+}
+
+extern "C" OJCAD_Status ojcad_extruded_circle_vector_create(
+    double radius_mm, double height_mm, double direction_x, double direction_y,
+    double direction_z, OJCAD_Shape** out_shape, OJCAD_Error* out_error) {
     clear_error(out_error);
     if (out_shape == nullptr) {
         set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT, "output shape pointer is required");
         return OJCAD_STATUS_INVALID_ARGUMENT;
     }
     *out_shape = nullptr;
-    if (!std::isfinite(radius_mm) || !std::isfinite(height_mm) ||
-        radius_mm <= 0.0 || height_mm <= 0.0 || radius_mm > 1e7 || height_mm > 1e7) {
+    gp_Vec displacement;
+    if (!std::isfinite(radius_mm) || radius_mm <= 0.0 || radius_mm > 1e7 ||
+        !make_solid_extrusion_displacement(height_mm, direction_x, direction_y, direction_z,
+                                           displacement)) {
         set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
-                  "circle extrusion radius and height must be finite positive values within 10,000,000 mm");
+                  "circle solid extrusion needs a finite positive radius and height, and a finite direction with a non-zero Z component");
         return OJCAD_STATUS_INVALID_ARGUMENT;
     }
     return create_shape([=]() {
-        BRepPrimAPI_MakeCylinder builder(radius_mm, height_mm);
-        builder.Build();
-        return builder.IsDone() ? builder.Shape() : TopoDS_Shape{};
+        const TopoDS_Wire wire = circle_wire(radius_mm);
+        if (wire.IsNull()) return TopoDS_Shape{};
+        BRepBuilderAPI_MakeFace face(wire);
+        if (!face.IsDone()) return TopoDS_Shape{};
+        BRepPrimAPI_MakePrism prism(face.Face(), displacement);
+        prism.Build();
+        return prism.IsDone() ? prism.Shape() : TopoDS_Shape{};
     }, out_shape, out_error);
 }
 
@@ -617,17 +666,27 @@ extern "C" OJCAD_Status ojcad_extruded_ellipse_create(double radius_x_mm, double
                                                        double height_mm,
                                                        OJCAD_Shape** out_shape,
                                                        OJCAD_Error* out_error) {
+    return ojcad_extruded_ellipse_vector_create(radius_x_mm, radius_y_mm, height_mm,
+                                               0.0, 0.0, 1.0, out_shape, out_error);
+}
+
+extern "C" OJCAD_Status ojcad_extruded_ellipse_vector_create(
+    double radius_x_mm, double radius_y_mm, double height_mm,
+    double direction_x, double direction_y, double direction_z,
+    OJCAD_Shape** out_shape, OJCAD_Error* out_error) {
     clear_error(out_error);
     if (out_shape == nullptr) {
         set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT, "output shape pointer is required");
         return OJCAD_STATUS_INVALID_ARGUMENT;
     }
     *out_shape = nullptr;
+    gp_Vec displacement;
     if (!std::isfinite(radius_x_mm) || !std::isfinite(radius_y_mm) ||
-        !std::isfinite(height_mm) || radius_x_mm <= 0.0 || radius_y_mm <= 0.0 ||
-        height_mm <= 0.0 || radius_x_mm > 1e7 || radius_y_mm > 1e7 || height_mm > 1e7) {
+        radius_x_mm <= 0.0 || radius_y_mm <= 0.0 || radius_x_mm > 1e7 || radius_y_mm > 1e7 ||
+        !make_solid_extrusion_displacement(height_mm, direction_x, direction_y, direction_z,
+                                           displacement)) {
         set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
-                  "ellipse extrusion radii and height must be finite positive values within 10,000,000 mm");
+                  "ellipse solid extrusion needs finite positive radii and height, and a finite direction with a non-zero Z component");
         return OJCAD_STATUS_INVALID_ARGUMENT;
     }
     return create_shape([=]() {
@@ -635,7 +694,7 @@ extern "C" OJCAD_Status ojcad_extruded_ellipse_create(double radius_x_mm, double
         if (wire.IsNull()) return TopoDS_Shape{};
         BRepBuilderAPI_MakeFace face(wire);
         if (!face.IsDone()) return TopoDS_Shape{};
-        BRepPrimAPI_MakePrism prism(face.Face(), gp_Vec(0.0, 0.0, height_mm));
+        BRepPrimAPI_MakePrism prism(face.Face(), displacement);
         prism.Build();
         return prism.IsDone() ? prism.Shape() : TopoDS_Shape{};
     }, out_shape, out_error);
@@ -820,6 +879,151 @@ extern "C" OJCAD_Status ojcad_open_polyline_curve_create(const double* points_xy
     }, out_shape, out_error);
 }
 
+extern "C" OJCAD_Status ojcad_bezier_curve_create(const double* points_xy_mm,
+                                                    uint32_t point_count,
+                                                    OJCAD_Shape** out_shape,
+                                                    OJCAD_Error* out_error) {
+    clear_error(out_error);
+    if (points_xy_mm == nullptr || out_shape == nullptr) {
+        set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
+                  "Bezier control points and output shape pointer are required");
+        return OJCAD_STATUS_INVALID_ARGUMENT;
+    }
+    *out_shape = nullptr;
+    if (point_count != 4) {
+        set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
+                  "a cubic Bezier curve requires exactly four XY control points");
+        return OJCAD_STATUS_INVALID_ARGUMENT;
+    }
+    std::array<gp_Pnt, 4> control_points;
+    for (uint32_t index = 0; index < point_count; ++index) {
+        const double x = points_xy_mm[index * 2];
+        const double y = points_xy_mm[index * 2 + 1];
+        if (!std::isfinite(x) || !std::isfinite(y) || std::abs(x) > 1e7 || std::abs(y) > 1e7) {
+            set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
+                      "Bezier control points must be finite millimetre values within ±10,000,000");
+            return OJCAD_STATUS_INVALID_ARGUMENT;
+        }
+        control_points[index] = gp_Pnt(x, y, 0.0);
+    }
+    if (control_points.front().Distance(control_points.back()) <= 1e-9) {
+        set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
+                  "a cubic Bezier curve needs distinct start and end control points");
+        return OJCAD_STATUS_INVALID_ARGUMENT;
+    }
+    return create_shape([control_points]() {
+        const TopoDS_Wire wire = bezier_wire(control_points);
+        return wire.IsNull() ? TopoDS_Shape{} : TopoDS_Shape(wire);
+    }, out_shape, out_error);
+}
+
+extern "C" OJCAD_Status ojcad_extruded_bezier_surface_vector_create(
+    const double* points_xy_mm, uint32_t point_count, double height_mm,
+    double direction_x, double direction_y, double direction_z,
+    OJCAD_Shape** out_shape, OJCAD_Error* out_error) {
+    clear_error(out_error);
+    if (points_xy_mm == nullptr || out_shape == nullptr) {
+        set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
+                  "Bezier control points and output shape pointer are required");
+        return OJCAD_STATUS_INVALID_ARGUMENT;
+    }
+    *out_shape = nullptr;
+    if (point_count != 4) {
+        set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
+                  "a cubic Bezier surface requires exactly four XY control points");
+        return OJCAD_STATUS_INVALID_ARGUMENT;
+    }
+    std::array<gp_Pnt, 4> control_points;
+    for (uint32_t index = 0; index < point_count; ++index) {
+        const double x = points_xy_mm[index * 2];
+        const double y = points_xy_mm[index * 2 + 1];
+        if (!std::isfinite(x) || !std::isfinite(y) || std::abs(x) > 1e7 || std::abs(y) > 1e7) {
+            set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
+                      "Bezier control points must be finite millimetre values within ±10,000,000");
+            return OJCAD_STATUS_INVALID_ARGUMENT;
+        }
+        control_points[index] = gp_Pnt(x, y, 0.0);
+    }
+    if (control_points.front().Distance(control_points.back()) <= 1e-9) {
+        set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
+                  "a cubic Bezier surface needs distinct start and end control points");
+        return OJCAD_STATUS_INVALID_ARGUMENT;
+    }
+    gp_Vec displacement;
+    if (!make_extrusion_displacement(height_mm, direction_x, direction_y, direction_z,
+                                     displacement)) {
+        set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
+                  "Bezier surface extrusion needs a finite positive height and a non-zero finite direction");
+        return OJCAD_STATUS_INVALID_ARGUMENT;
+    }
+    return create_shape([control_points, displacement]() {
+        const TopoDS_Wire wire = bezier_wire(control_points);
+        if (wire.IsNull()) return TopoDS_Shape{};
+        BRepPrimAPI_MakePrism prism(wire, displacement);
+        prism.Build();
+        return prism.IsDone() ? prism.Shape() : TopoDS_Shape{};
+    }, out_shape, out_error);
+}
+
+extern "C" OJCAD_Status ojcad_revolved_bezier_surface_create(
+    const double* control_points_xy_mm, uint32_t point_count,
+    OJCAD_Shape** out_shape, OJCAD_Error* out_error) {
+    return ojcad_revolved_bezier_surface_angle_create(
+        control_points_xy_mm, point_count, 360.0, out_shape, out_error);
+}
+
+extern "C" OJCAD_Status ojcad_revolved_bezier_surface_angle_create(
+    const double* control_points_xy_mm, uint32_t point_count, double angle_deg,
+    OJCAD_Shape** out_shape, OJCAD_Error* out_error) {
+    clear_error(out_error);
+    if (control_points_xy_mm == nullptr || out_shape == nullptr) {
+        set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
+                  "Bezier control points and output shape pointer are required");
+        return OJCAD_STATUS_INVALID_ARGUMENT;
+    }
+    *out_shape = nullptr;
+    if (point_count != 4) {
+        set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
+                  "a revolved cubic Bezier surface requires exactly four XY control points");
+        return OJCAD_STATUS_INVALID_ARGUMENT;
+    }
+    if (!std::isfinite(angle_deg) || angle_deg <= 0.0 || angle_deg > 360.0) {
+        set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
+                  "revolution angle must be a finite value in (0, 360] degrees");
+        return OJCAD_STATUS_INVALID_ARGUMENT;
+    }
+    std::array<gp_Pnt, 4> control_points;
+    for (uint32_t index = 0; index < point_count; ++index) {
+        const double x = control_points_xy_mm[index * 2];
+        const double y = control_points_xy_mm[index * 2 + 1];
+        if (!std::isfinite(x) || !std::isfinite(y) || std::abs(x) > 1e7 || std::abs(y) > 1e7) {
+            set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
+                      "Bezier control points must be finite millimetre values within ±10,000,000");
+            return OJCAD_STATUS_INVALID_ARGUMENT;
+        }
+        if (x <= 1e-9) {
+            set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
+                      "revolved Bezier control points must stay at positive X radius from the Y axis");
+            return OJCAD_STATUS_INVALID_ARGUMENT;
+        }
+        control_points[index] = gp_Pnt(x, y, 0.0);
+    }
+    if (control_points.front().Distance(control_points.back()) <= 1e-9) {
+        set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
+                  "a cubic Bezier curve needs distinct start and end control points");
+        return OJCAD_STATUS_INVALID_ARGUMENT;
+    }
+    const double angle_rad = angle_deg * std::acos(-1.0) / 180.0;
+    return create_shape([control_points, angle_rad]() {
+        const TopoDS_Wire wire = bezier_wire(control_points);
+        if (wire.IsNull()) return TopoDS_Shape{};
+        const gp_Ax1 axis(gp_Pnt(0.0, 0.0, 0.0), gp_Dir(0.0, 1.0, 0.0));
+        BRepPrimAPI_MakeRevol revolution(wire, axis, angle_rad, true);
+        revolution.Build();
+        return revolution.IsDone() ? revolution.Shape() : TopoDS_Shape{};
+    }, out_shape, out_error);
+}
+
 extern "C" OJCAD_Status ojcad_extruded_open_polyline_surface_create(
     const double* points_xy_mm, uint32_t point_count, double height_mm,
     OJCAD_Shape** out_shape, OJCAD_Error* out_error) {
@@ -882,6 +1086,13 @@ extern "C" OJCAD_Status ojcad_extruded_open_polyline_surface_vector_create(
 extern "C" OJCAD_Status ojcad_revolved_open_polyline_surface_create(
     const double* points_xy_mm, uint32_t point_count,
     OJCAD_Shape** out_shape, OJCAD_Error* out_error) {
+    return ojcad_revolved_open_polyline_surface_angle_create(
+        points_xy_mm, point_count, 360.0, out_shape, out_error);
+}
+
+extern "C" OJCAD_Status ojcad_revolved_open_polyline_surface_angle_create(
+    const double* points_xy_mm, uint32_t point_count, double angle_deg,
+    OJCAD_Shape** out_shape, OJCAD_Error* out_error) {
     clear_error(out_error);
     if (points_xy_mm == nullptr || out_shape == nullptr) {
         set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
@@ -892,6 +1103,11 @@ extern "C" OJCAD_Status ojcad_revolved_open_polyline_surface_create(
     if (point_count < 2 || point_count > 64) {
         set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
                   "revolved surface profile needs 2..=64 points");
+        return OJCAD_STATUS_INVALID_ARGUMENT;
+    }
+    if (!std::isfinite(angle_deg) || angle_deg <= 0.0 || angle_deg > 360.0) {
+        set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
+                  "revolution angle must be a finite value in (0, 360] degrees");
         return OJCAD_STATUS_INVALID_ARGUMENT;
     }
     auto points = read_xy_points(points_xy_mm, point_count);
@@ -917,12 +1133,13 @@ extern "C" OJCAD_Status ojcad_revolved_open_polyline_surface_create(
             }
         }
     }
-    return create_shape([points = std::move(points)]() {
+    const double angle_rad = angle_deg * std::acos(-1.0) / 180.0;
+    return create_shape([points = std::move(points), angle_rad]() {
         BRepBuilderAPI_MakePolygon profile;
         for (const gp_Pnt& point : points) profile.Add(point);
         if (!profile.IsDone()) return TopoDS_Shape{};
         const gp_Ax1 axis(gp_Pnt(0.0, 0.0, 0.0), gp_Dir(0.0, 1.0, 0.0));
-        BRepPrimAPI_MakeRevol revolution(profile.Wire(), axis, 2.0 * std::acos(-1.0), true);
+        BRepPrimAPI_MakeRevol revolution(profile.Wire(), axis, angle_rad, true);
         revolution.Build();
         return revolution.IsDone() ? revolution.Shape() : TopoDS_Shape{};
     }, out_shape, out_error);
@@ -961,6 +1178,14 @@ extern "C" OJCAD_Status ojcad_extruded_polygon_create(const double* points_xy_mm
                                                        double height_mm,
                                                        OJCAD_Shape** out_shape,
                                                        OJCAD_Error* out_error) {
+    return ojcad_extruded_polygon_vector_create(points_xy_mm, point_count, height_mm,
+                                                0.0, 0.0, 1.0, out_shape, out_error);
+}
+
+extern "C" OJCAD_Status ojcad_extruded_polygon_vector_create(
+    const double* points_xy_mm, uint32_t point_count, double height_mm,
+    double direction_x, double direction_y, double direction_z,
+    OJCAD_Shape** out_shape, OJCAD_Error* out_error) {
     clear_error(out_error);
     if (points_xy_mm == nullptr || out_shape == nullptr) {
         set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
@@ -968,9 +1193,12 @@ extern "C" OJCAD_Status ojcad_extruded_polygon_create(const double* points_xy_mm
         return OJCAD_STATUS_INVALID_ARGUMENT;
     }
     *out_shape = nullptr;
-    if (point_count < 3 || point_count > 64 || !std::isfinite(height_mm) || height_mm <= 0.0) {
+    gp_Vec displacement;
+    if (point_count < 3 || point_count > 64 ||
+        !make_solid_extrusion_displacement(height_mm, direction_x, direction_y, direction_z,
+                                           displacement)) {
         set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
-                  "polygon extrusion needs 3..=64 points and a finite positive height");
+                  "polygon solid extrusion needs 3..=64 points, a finite positive height, and a finite direction with a non-zero Z component");
         return OJCAD_STATUS_INVALID_ARGUMENT;
     }
 
@@ -1010,14 +1238,14 @@ extern "C" OJCAD_Status ojcad_extruded_polygon_create(const double* points_xy_mm
         return OJCAD_STATUS_INVALID_ARGUMENT;
     }
 
-    return create_shape([points = std::move(points), height_mm]() {
+    return create_shape([points = std::move(points), displacement]() {
         BRepBuilderAPI_MakePolygon wire_builder;
         for (const gp_Pnt& point : points) wire_builder.Add(point);
         wire_builder.Close();
         if (!wire_builder.IsDone()) return TopoDS_Shape{};
         BRepBuilderAPI_MakeFace face_builder(wire_builder.Wire());
         if (!face_builder.IsDone()) return TopoDS_Shape{};
-        BRepPrimAPI_MakePrism prism(face_builder.Face(), gp_Vec(0.0, 0.0, height_mm));
+        BRepPrimAPI_MakePrism prism(face_builder.Face(), displacement);
         prism.Build();
         return prism.IsDone() ? prism.Shape() : TopoDS_Shape{};
     }, out_shape, out_error);

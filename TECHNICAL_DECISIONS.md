@@ -14,10 +14,10 @@ Record accepted decisions here. Proposed items remain open until reviewed; do no
 ## TD-002 — Use an opaque C ABI for Rust/C++ communication
 
 - **Status:** Accepted for the initial kernel boundary
-- **Decision:** Expose a version-reporting C ABI, opaque shape and mesh handles, fixed-layout error values, and explicit destruction. Catch C++ exceptions at every operation boundary. ABI version 21 supports solid builders, curve and surface builders, world-plane shape mirrors, transforms, B-rep booleans, linear/polar arrays, measurements, bounds, validity checks, and controlled tessellation.
+- **Decision:** Expose a version-reporting C ABI, opaque shape and mesh handles, fixed-layout error values, and explicit destruction. Catch C++ exceptions at every operation boundary. ABI version 26 supports solid builders, curve and surface builders, partial revolutions, world-plane shape mirrors, transforms, B-rep booleans, linear/polar arrays, measurements, bounds, validity checks, and controlled tessellation.
 - **Reason:** C ABI limits coupling and avoids exposing unstable C++ or OCCT types to Rust.
 - **Trade-off:** More explicit conversion code and API versioning work.
-- **Validation:** Rust checks ABI version 21, owns handles with drop-based release, and integration-tests curve lengths, surface area and tessellation, primitive validity, expected volumes, bounds, transforms, mirrors, booleans, arrays, gemstone geometry, and structured argument errors.
+- **Validation:** Rust checks ABI version 26, owns handles with drop-based release, and integration-tests curve lengths, surface area and tessellation, primitive validity, expected volumes, bounds, transforms, mirrors, booleans, arrays, gemstone geometry, and structured argument errors.
 
 ## TD-003 — Keep internal geometry in millimetres
 
@@ -61,7 +61,7 @@ Record accepted decisions here. Proposed items remain open until reviewed; do no
 ## TD-008 — Store and apply object transforms
 
 - **Status:** Implemented in the current editor prototype
-- **Decision:** `.ojcad` version 16 stores finite millimetre translation, X/Y/Z Euler rotations in degrees, positive uniform scale, optional world-plane mirror flags, optional user-entered density, one editable primitive boolean tool, one editable linear or polar array, polygon, circle, ellipse, arc, line, open polyline, revolved-profile, extrusion-surface, and revolved-surface data. ABI version 21 applies scale, rotations, translation, then enabled world-origin plane mirrors. Versions 1 through 15 remain readable.
+- **Decision:** `.ojcad` version 16 introduced finite millimetre translation, X/Y/Z Euler rotations in degrees, positive uniform scale, optional world-plane mirror flags, optional user-entered density, one editable primitive boolean tool, one editable linear or polar array, polygon, circle, ellipse, arc, line, open polyline, revolved-profile, extrusion-surface, and revolved-surface data. ABI version 26 applies scale, rotations, translation, then enabled world-origin plane mirrors. Versions 1 through 20 remain readable; version 21 stores revolution angles.
 - **Reason:** Move, rotate, and scale need to regenerate the same geometry after save and reopen, and the transform order must be deterministic.
 - **Validation:** Rust round-trip and version-migration tests, OCCT transform/mass-properties/bounds tests, and CLI create/transform/inspect checks.
 
@@ -91,7 +91,7 @@ Record accepted decisions here. Proposed items remain open until reviewed; do no
 
 ## TD-012 — Persist straight-sided profile extrusion inputs
 
-- **Status:** First implemented in ABI version 10 and project version 5; retained in current ABI 22/project 17
+- **Status:** First implemented in ABI version 10 and project version 5; retained in current ABI 26/project 21
 - **Decision:** Store 3–64 XY vertices as the source of a closed straight-sided profile, reject invalid or self-intersecting outlines, and extrude the exact wire and face along +Z. The editor previews the profile while it is being edited and persists every point.
 - **Reason:** A simple editable sketch-to-solid workflow enables custom plate, pendant, and signet shapes without adding placeholder geometry tools.
 - **Trade-off:** Curved sketch segments, constraints, arbitrary extrusion directions, and profile booleans are not represented yet.
@@ -107,7 +107,7 @@ Record accepted decisions here. Proposed items remain open until reviewed; do no
 
 ## TD-015 — Add an analytic ellipse profile workflow
 
-- **Status:** Implemented in ABI version 13 and project version 8; retained in current ABI 22/project 17
+- **Status:** Implemented in ABI version 13 and project version 8; retained in current ABI 26/project 21
 - **Decision:** Store editable X/Y radii and build an exact OCCT ellipse wire, planar face, or +Z prism. Use analytic OCCT geometry for regenerated results and a lightweight polygonal approximation only for the live editor preview.
 - **Reason:** Ellipses are a common precision sketch primitive and can drive planar jewellery components without converting the source profile to a mesh.
 - **Trade-off:** The ellipse is centered in XY and extrudes along +Z; rotated-plane sketching, trim curves, and arbitrary directions remain future work.
@@ -123,7 +123,7 @@ Record accepted decisions here. Proposed items remain open until reviewed; do no
 
 ## TD-016 — Add an editable open circular arc
 
-- **Status:** Implemented in ABI version 14 and project version 9; retained in current ABI 22/project 17
+- **Status:** Implemented in ABI version 14 and project version 9; retained in current ABI 26/project 21
 - **Decision:** Store radius, start angle, and positive counter-clockwise sweep as editable project parameters. Construct a trimmed OCCT circular edge and display a sampled preview without closing its endpoints.
 - **Reason:** Arcs are a basic curve command in the requested Rhino-style curve-first workflow, and their open topology must remain explicit.
 - **Trade-off:** The first arc is centered in XY and exists as a curve only; arc-to-surface, sweep, and arbitrary-plane operations need their own geometric definitions.
@@ -131,7 +131,7 @@ Record accepted decisions here. Proposed items remain open until reviewed; do no
 
 ## TD-017 — Add an editable open line curve
 
-- **Status:** Implemented in ABI version 15 and project version 10; retained in current ABI 22/project 17
+- **Status:** Implemented in ABI version 15 and project version 10; retained in current ABI 26/project 21
 - **Decision:** Store two XY endpoints in millimetres, reject coincident or out-of-range points, and construct an exact OCCT edge in an open wire. The editor exposes both endpoints and previews their two distinct vertices.
 - **Reason:** A line is the simplest open sketch primitive and a foundation for future open polylines, constraints, and curve-based surface tools.
 - **Trade-off:** The first implementation is a single XY segment. Its +Z extrusion surface is supported; snapping, constraints, arbitrary planes, and curved-path operations remain future work.
@@ -139,7 +139,7 @@ Record accepted decisions here. Proposed items remain open until reviewed; do no
 
 ## TD-018 — Add an editable open polyline curve
 
-- **Status:** Implemented in ABI version 16 and project version 11; retained in current ABI 22/project 17
+- **Status:** Implemented in ABI version 16 and project version 11; retained in current ABI 26/project 21
 - **Decision:** Store 2–64 ordered XY points as project data, reject non-finite, out-of-range, or duplicate neighboring points, and construct a non-closed OCCT wire. The editor permits point insertion, removal, and coordinate editing.
 - **Reason:** Open polylines are a basic sketch path for later sweep and surface tools and must remain distinct from closed face boundaries.
 - **Trade-off:** Self-crossing paths are allowed as wire geometry; constraints, snapping, and downstream sweeps remain future work.
@@ -147,7 +147,7 @@ Record accepted decisions here. Proposed items remain open until reviewed; do no
 
 ## TD-019 — Build solids by revolving an editable section
 
-- **Status:** Implemented in ABI version 17 and project version 12; retained in current ABI 22/project 17
+- **Status:** Implemented in ABI version 17 and project version 12; retained in current ABI 26/project 21
 - **Decision:** Revolve a simple closed XY polygon around the Y axis through 360°. X coordinates represent radius and must remain positive; Y is the axial height. Store and edit the profile points, and generate the exact B-rep solid through OCCT.
 - **Reason:** Profile revolution is a core curve-first solid workflow for rings and turned jewellery forms.
 - **Trade-off:** Partial revolutions, alternate axes, curved profile segments, and revolved surface stages remain future work.
@@ -155,7 +155,7 @@ Record accepted decisions here. Proposed items remain open until reviewed; do no
 
 ## TD-020 — Extrude open curves into surface shells
 
-- **Status:** Implemented in ABI version 18 and project version 13; retained in current ABI 22/project 17
+- **Status:** Implemented in ABI version 18 and project version 13; retained in current ABI 26/project 21
 - **Decision:** Extrude a validated open XY line or polyline along +Z using OCCT to create an open surface shell. Preserve the source endpoints or ordered polyline points and extrusion height in the project file.
 - **Reason:** Rhino-style curve → surface workflows need a surface operation for open paths as well as planar faces built from closed boundaries.
 - **Trade-off:** This creates an open shell, not a closed solid. It supports straight polyline segments; arbitrary vectors were added later, while curved edges and solid thickening remain future work.
@@ -163,7 +163,7 @@ Record accepted decisions here. Proposed items remain open until reviewed; do no
 
 ## TD-021 — Extrude an analytic arc into a cylindrical surface
 
-- **Status:** Implemented in ABI version 19 and project version 14; retained in current ABI 22/project 17
+- **Status:** Implemented in ABI version 19 and project version 14; retained in current ABI 26/project 21
 - **Decision:** Preserve the arc radius, start angle, and sweep as editable parameters and extrude its exact OCCT circular edge along +Z to create a cylindrical surface shell.
 - **Reason:** The arc command should continue through the same curve → surface workflow as line and polyline curves while retaining exact circular geometry in the kernel.
 - **Trade-off:** This creates an open shell, not a solid. The live preview samples the analytic arc; regenerated geometry and measurements come from OCCT. Arbitrary extrusion vectors were added later; thickening remains future work.
@@ -171,7 +171,7 @@ Record accepted decisions here. Proposed items remain open until reviewed; do no
 
 ## TD-022 — Revolve an open profile into a surface shell
 
-- **Status:** Implemented in ABI version 20 and project version 15; retained in current ABI 22/project 17
+- **Status:** Implemented in ABI version 20 and project version 15; retained in current ABI 26/project 21
 - **Decision:** Revolve a validated open XY profile around +Y through 360° using OCCT. Every X coordinate is a radius and must stay positive; Y is the axial coordinate. Preserve and edit the ordered profile points in the project.
 - **Reason:** A Rhino-style surface toolbox should let designers create surfaces of revolution from curves, in addition to extruding them and revolving closed profiles into solids.
 - **Trade-off:** This creates an open surface shell, not a solid. It supports straight profile segments and a full 360° turn; partial turns and arbitrary axes remain future work.
@@ -187,8 +187,40 @@ Record accepted decisions here. Proposed items remain open until reviewed; do no
 
 ## TD-024 — Extrude open curves along an editable 3D direction
 
-- **Status:** Implemented in ABI version 22 and project version 17
+- **Status:** Implemented in ABI version 22 and project version 17; retained in current ABI 26/project 21
 - **Decision:** Add vector-based OCCT extrusion for open lines, polylines, and circular arcs. Store a finite, non-zero XYZ direction with the surface feature; the saved height is the travel distance, so the kernel normalizes the direction before building the surface shell. Keep the original +Z ABI calls as compatibility wrappers, expose direction components in the editor, and provide a CLI command to update them.
 - **Reason:** Rhino-style curve → surface workflows need a general extrusion vector rather than limiting designers to the world Z axis.
 - **Trade-off:** This creates an open shell, not a closed solid. Curved polyline segments, surface thickening, and unrestricted sweep directions on other profile tools remain future work.
 - **Validation:** Native smoke, Rust FFI, and CLI project tests cover non-axis-aligned displacement, exact surface area and bounds, zero-direction rejection, project version 17 round trips, and version 16 compatibility.
+
+## TD-025 — Extrude closed profiles along an editable 3D direction
+
+- **Status:** Implemented in ABI version 23 and project version 18; retained in current ABI 26/project 21
+- **Decision:** Extend vector extrusion to closed polygon, circle, and ellipse profiles. Normalize the saved XYZ vector so the height parameter remains the travel distance. Keep existing +Z entry points as compatibility wrappers and serialize direction values only in project version 18 or newer.
+- **Reason:** The curve → surface → solid workflow should let a designer tilt the solid extrusion without changing the source XY profile, using the same direction controls as open-curve surface extrusions.
+- **Trade-off:** These profiles remain centered/oriented in XY; an extrusion with no Z component cannot produce a volumetric solid and is rejected by OCCT. Arbitrary sketch planes and profile-as-boolean-tool remain future work.
+- **Validation:** Native smoke, Rust FFI, CLI persistence, and compatibility tests cover polygon/circle/ellipse volume and bounds, non-axis-aligned displacement, zero-direction rejection, version 18 round trips, default-direction migration from version 17, and rejection of unsupported old-version direction fields.
+
+## TD-026 — Add editable cubic Bezier curves and extrusion surfaces
+
+- **Status:** Implemented in ABI version 24 and project version 19; retained in current ABI 26/project 21
+- **Decision:** Store exactly four finite XY control points, create an exact OCCT cubic Bezier edge behind the C ABI, and extrude that curve into a surface shell along a normalized 3D direction. Expose the four editable points in the Rust editor and CLI, use sampled points only for the live preview, and persist the new feature in project version 19 while retaining compatibility with versions 1 through 18.
+- **Reason:** Designers need a smooth freeform curve stage that continues into the same curve → surface modeling flow as line, polyline, and arc tools.
+- **Trade-off:** This first spline tool is cubic and has four control points; arbitrary degree, interpolation curves, NURBS editing, and constraints remain future work.
+- **Validation:** Native smoke, Rust FFI, GUI preview, project round-trip, CLI conversion, and compatibility tests check curve length, surface area, bounds, validity, four-point validation, and version 18 rejection for the new feature.
+
+## TD-027 — Revolve cubic Bezier curves into surface shells
+
+- **Status:** Implemented in ABI version 25 and project version 20; retained in current ABI 26/project 21
+- **Decision:** Revolve an exact four-control-point cubic Bezier wire through 360° around the Y axis. Require every control point to have positive X radius, use sampled curve points only for the live viewport preview, and preserve the controls in the project document. Add a direct curve-to-surface command and an editor action alongside Bezier extrusion.
+- **Reason:** The curve → surface workflow should let designers take the same editable smooth profile into either an extrusion surface or a surface of revolution.
+- **Trade-off:** The first operation uses a full revolution around Y; partial angles, alternate axes, and profiles that touch or cross the axis remain unsupported.
+- **Validation:** Native smoke, Rust FFI, GUI preview, project-version compatibility, and CLI tests check surface validity, analytic area and bounds, four-control-point validation, positive radius, and rejection of version 19 for the new feature.
+
+## TD-028 — Support partial revolutions for open-profile surfaces
+
+- **Status:** Implemented in ABI version 26 and project version 21
+- **Decision:** Revolve open polyline and cubic Bezier profiles around +Y through any finite angle greater than 0° and up to 360°. Keep the previous full-turn ABI entry points as 360° wrappers, store the angle in new project files, and migrate older revolved-surface projects to 360°.
+- **Reason:** A partial turn is a standard surface-of-revolution tool and gives designers control over open shells without changing their source profile.
+- **Trade-off:** The axis remains +Y and the current tools produce surface shells; partial revolved solids, alternate axes, and angles at or below 0° remain unsupported.
+- **Validation:** Native smoke, Rust FFI, GUI preview math, CLI/project round-trip, and migration tests check a 90° surface's validity, analytic area and bounds, angle limits, and preservation of version 20 full-turn projects.
