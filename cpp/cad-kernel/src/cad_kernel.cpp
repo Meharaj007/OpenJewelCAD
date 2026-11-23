@@ -538,7 +538,7 @@ extern "C" OJCAD_Status ojcad_brilliant_gem_create(double diameter_mm, double to
     }, out_shape, out_error);
 }
 
-extern "C" uint32_t ojcad_abi_version(void) { return 24; }
+extern "C" uint32_t ojcad_abi_version(void) { return 25; }
 
 extern "C" OJCAD_Status ojcad_circle_curve_create(double radius_mm,
                                                     OJCAD_Shape** out_shape,
@@ -962,6 +962,52 @@ extern "C" OJCAD_Status ojcad_extruded_bezier_surface_vector_create(
         BRepPrimAPI_MakePrism prism(wire, displacement);
         prism.Build();
         return prism.IsDone() ? prism.Shape() : TopoDS_Shape{};
+    }, out_shape, out_error);
+}
+
+extern "C" OJCAD_Status ojcad_revolved_bezier_surface_create(
+    const double* control_points_xy_mm, uint32_t point_count,
+    OJCAD_Shape** out_shape, OJCAD_Error* out_error) {
+    clear_error(out_error);
+    if (control_points_xy_mm == nullptr || out_shape == nullptr) {
+        set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
+                  "Bezier control points and output shape pointer are required");
+        return OJCAD_STATUS_INVALID_ARGUMENT;
+    }
+    *out_shape = nullptr;
+    if (point_count != 4) {
+        set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
+                  "a revolved cubic Bezier surface requires exactly four XY control points");
+        return OJCAD_STATUS_INVALID_ARGUMENT;
+    }
+    std::array<gp_Pnt, 4> control_points;
+    for (uint32_t index = 0; index < point_count; ++index) {
+        const double x = control_points_xy_mm[index * 2];
+        const double y = control_points_xy_mm[index * 2 + 1];
+        if (!std::isfinite(x) || !std::isfinite(y) || std::abs(x) > 1e7 || std::abs(y) > 1e7) {
+            set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
+                      "Bezier control points must be finite millimetre values within ±10,000,000");
+            return OJCAD_STATUS_INVALID_ARGUMENT;
+        }
+        if (x <= 1e-9) {
+            set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
+                      "revolved Bezier control points must stay at positive X radius from the Y axis");
+            return OJCAD_STATUS_INVALID_ARGUMENT;
+        }
+        control_points[index] = gp_Pnt(x, y, 0.0);
+    }
+    if (control_points.front().Distance(control_points.back()) <= 1e-9) {
+        set_error(out_error, OJCAD_STATUS_INVALID_ARGUMENT,
+                  "a cubic Bezier curve needs distinct start and end control points");
+        return OJCAD_STATUS_INVALID_ARGUMENT;
+    }
+    return create_shape([control_points]() {
+        const TopoDS_Wire wire = bezier_wire(control_points);
+        if (wire.IsNull()) return TopoDS_Shape{};
+        const gp_Ax1 axis(gp_Pnt(0.0, 0.0, 0.0), gp_Dir(0.0, 1.0, 0.0));
+        BRepPrimAPI_MakeRevol revolution(wire, axis, 2.0 * std::acos(-1.0), true);
+        revolution.Build();
+        return revolution.IsDone() ? revolution.Shape() : TopoDS_Shape{};
     }, out_shape, out_error);
 }
 
